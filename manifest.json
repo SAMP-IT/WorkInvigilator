@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Work Vigilator Extension",
+  "version": "1.0",
+  "description": "Professional work monitoring extension with audio recording and screenshots",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp84b/GFN18fDfBBwhpvez5oeJULanVrzaWYTkEVq8Brn4NIV3L/5CfLaHh8EfUHREIaR0sjsmi5OMR7GlSAvYhrhRHMxBINHeLSecFdR2wR4xiy31FJfijJSHAeQPxZsDK5XOxv8ITyDhwJbvstaKHH4d57eR9OsJ9TOEBDvuKMciH614DIpshuRdBvZKx0YJD9pUy+y/KS1Qk4GqKY/aLJj4x3soNzsHuBbxzZ3g5/tIPp79RcJRhQiVbhNT7T0OemEPGffDkScxUlgEfFS0SFqFITi2edXgswMVLkDkKe12Rq0GsKuFIU7VABXAW9daypVwV8mFGXfAZMESTc5yQIDAQAB",
+  "supabase_config": {
+    "url": "https://qqnmilkgltcooqzytkxy.supabase.co",
+    "anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxbm1pbGtnbHRjb29xenl0a3h5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2MDYzODcsImV4cCI6MjA3NDE4MjM4N30.Et5msR4pTjO1jZdQ35pUeWYdXAdCbM8mjqSrzzaLAEs"
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "alarms",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Audio Recorder"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["welcome.html", "supabase-config.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

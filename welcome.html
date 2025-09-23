@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welcome - Audio Recorder Extension</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .welcome-container {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 500px;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      backdrop-filter: blur(10px);
+    }
+    h1 {
+      margin: 0 0 10px 0;
+      color: #2d3748;
+      font-size: 28px;
+    }
+    .subtitle {
+      color: #4a5568;
+      margin-bottom: 30px;
+      font-size: 16px;
+    }
+    .mic-icon {
+      font-size: 64px;
+      margin: 20px 0;
+      display: block;
+    }
+    .permission-section {
+      background: rgba(102, 126, 234, 0.1);
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .permission-title {
+      font-weight: bold;
+      color: #2d3748;
+      margin-bottom: 10px;
+    }
+    .permission-text {
+      color: #4a5568;
+      line-height: 1.5;
+    }
+    .btn {
+      background: #48bb78;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      margin: 10px;
+      transition: all 0.2s ease;
+    }
+    .btn:hover {
+      background: #38a169;
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: #718096;
+    }
+    .btn-secondary:hover {
+      background: #5a67d8;
+    }
+    .status {
+      margin: 20px 0;
+      padding: 10px;
+      border-radius: 8px;
+      display: none;
+    }
+    .status.success {
+      background: rgba(72, 187, 120, 0.1);
+      color: #2f855a;
+      border: 1px solid rgba(72, 187, 120, 0.2);
+    }
+    .status.error {
+      background: rgba(229, 62, 62, 0.1);
+      color: #c53030;
+      border: 1px solid rgba(229, 62, 62, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="welcome-container">
+    <h1>🎙️ Welcome!</h1>
+    <p class="subtitle">Your Audio Recorder Extension is ready</p>
+
+    <div class="mic-icon">🎤</div>
+
+    <div class="permission-section">
+      <div class="permission-title">Microphone Permission Required</div>
+      <div class="permission-text">
+        To record audio from your microphone, we need your permission.
+        This allows the extension to access your laptop's microphone for recording purposes.
+      </div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <button id="grant-btn" class="btn">Grant Microphone Access</button>
+    <button id="skip-btn" class="btn btn-secondary">Skip for Now</button>
+
+    <p style="margin-top: 20px; color: #718096; font-size: 14px;">
+      You can always grant permission later from the extension popup.
+    </p>
+  </div>
+
+  <script src="welcome.js"></script>
+</body>
+</html>
