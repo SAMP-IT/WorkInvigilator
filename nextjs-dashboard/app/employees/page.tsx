@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -18,59 +18,24 @@ import {
 } from '@/components/ui/Table';
 import { AddEmployeeForm, type EmployeeFormData } from '@/components/forms/AddEmployeeForm';
 
-// Mock employee data
-const employees = [
-  {
-    id: '1',
-    name: 'Sarah Chen',
-    email: 'sarah.chen@company.com',
-    department: 'Engineering',
-    role: 'USER',
-    productivity7d: 92.5,
-    avgFocusHDay: 6.8,
-    avgSessionMin: 156,
-    lastActive: '24/09/2024 14:23',
-    status: 'online' as const
-  },
-  {
-    id: '2',
-    name: 'Mike Johnson',
-    email: 'mike.j@company.com',
-    department: 'Design',
-    role: 'ADMIN',
-    productivity7d: 88.3,
-    avgFocusHDay: 5.9,
-    avgSessionMin: 142,
-    lastActive: '24/09/2024 14:18',
-    status: 'online' as const
-  },
-  {
-    id: '3',
-    name: 'Lisa Wang',
-    email: 'lisa.wang@company.com',
-    department: 'Marketing',
-    role: 'USER',
-    productivity7d: 76.2,
-    avgFocusHDay: 4.8,
-    avgSessionMin: 128,
-    lastActive: '24/09/2024 13:45',
-    status: 'away' as const
-  },
-  {
-    id: '4',
-    name: 'David Kim',
-    email: 'david.kim@company.com',
-    department: 'Engineering',
-    role: 'USER',
-    productivity7d: 94.1,
-    avgFocusHDay: 7.2,
-    avgSessionMin: 168,
-    lastActive: '24/09/2024 12:30',
-    status: 'offline' as const
-  }
-];
+interface Employee {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+  role: string;
+  productivity7d: number;
+  avgFocusHDay: number;
+  avgSessionMin: number;
+  lastActive: string;
+  status: 'online' | 'offline' | 'away';
+  createdAt: string;
+}
 
 export default function EmployeesPage() {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -82,6 +47,30 @@ export default function EmployeesPage() {
     emp.department.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  useEffect(() => {
+    loadEmployees();
+  }, []);
+
+  const loadEmployees = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch('/api/employees');
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch employees');
+      }
+
+      const data = await response.json();
+      setEmployees(data.employees || []);
+    } catch (err) {
+      console.error('Error loading employees:', err);
+      setError('Failed to load employees. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formatProductivity = (value: number) => `${value.toFixed(1)}%`;
   const formatHours = (value: number) => `${value.toFixed(1)}h`;
   const formatMinutes = (value: number) => `${value}min`;
@@ -90,20 +79,29 @@ export default function EmployeesPage() {
     setIsCreating(true);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const response = await fetch('/api/employees', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
 
-      // Here you would typically call your API to create the employee
-      console.log('Creating employee:', formData);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create employee');
+      }
 
-      // Close modal and show success
+      const data = await response.json();
+      console.log('Employee created:', data);
+
+      // Close modal and refresh employee list
       setShowAddModal(false);
-
-      // You could also add the new employee to the local state here
-      // or refetch the employees list
+      await loadEmployees();
 
     } catch (error) {
       console.error('Error creating employee:', error);
+      setError(error instanceof Error ? error.message : 'Failed to create employee');
     } finally {
       setIsCreating(false);
     }
@@ -120,7 +118,7 @@ export default function EmployeesPage() {
           </div>
           <div className="flex items-center space-x-3">
             <Badge variant="info">
-              {employees.length} Total
+              {loading ? '...' : employees.length} Total
             </Badge>
             <Button onClick={() => setShowAddModal(true)}>
               + Add Employee
@@ -166,7 +164,47 @@ export default function EmployeesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredEmployees.map((employee) => (
+              {loading ? (
+                // Loading skeleton
+                Array.from({ length: 4 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell>
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-gray-300 rounded-full animate-pulse"></div>
+                        <div>
+                          <div className="h-4 bg-gray-300 rounded w-32 mb-1 animate-pulse"></div>
+                          <div className="h-3 bg-gray-300 rounded w-40 animate-pulse"></div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell><div className="h-4 bg-gray-300 rounded w-20 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-6 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-4 bg-gray-300 rounded w-12 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-4 bg-gray-300 rounded w-12 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-4 bg-gray-300 rounded w-24 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-8 bg-gray-300 rounded w-20 animate-pulse"></div></TableCell>
+                  </TableRow>
+                ))
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8">
+                    <div className="text-danger text-sm">{error}</div>
+                    <Button variant="outline" size="sm" onClick={loadEmployees} className="mt-2">
+                      Try Again
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ) : filteredEmployees.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8">
+                    <div className="text-ink-muted">
+                      {searchTerm ? 'No employees found matching your search.' : 'No employees found.'}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredEmployees.map((employee) => (
                 <TableRow
                   key={employee.id}
                   onClick={() => setSelectedEmployee(employee.id)}
@@ -237,7 +275,8 @@ export default function EmployeesPage() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+              ))
+              )}
             </TableBody>
           </Table>
         </Card>

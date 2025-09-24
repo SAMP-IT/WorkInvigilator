@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -16,107 +16,25 @@ import {
   TableCell
 } from '@/components/ui/Table';
 
-// Mock session data
-const sessions = [
-  {
-    id: '1',
-    employeeId: '1',
-    employeeName: 'Sarah Chen',
-    employeeAvatar: 'SC',
-    startTime: '24/09/2024 09:15',
-    endTime: '24/09/2024 17:30',
-    duration: '8h 15m',
-    focusTime: '6h 45m',
-    focusPercent: 82.1,
-    status: 'completed',
-    apps: ['VS Code', 'Chrome', 'Slack'],
-    screenshots: 45
-  },
-  {
-    id: '2',
-    employeeId: '2',
-    employeeName: 'Mike Johnson',
-    employeeAvatar: 'MJ',
-    startTime: '24/09/2024 08:45',
-    endTime: '24/09/2024 16:20',
-    duration: '7h 35m',
-    focusTime: '6h 10m',
-    focusPercent: 81.3,
-    status: 'completed',
-    apps: ['Figma', 'Chrome', 'Notion'],
-    screenshots: 38
-  },
-  {
-    id: '3',
-    employeeId: '3',
-    employeeName: 'Lisa Wang',
-    employeeAvatar: 'LW',
-    startTime: '24/09/2024 10:00',
-    endTime: 'Active',
-    duration: '4h 23m',
-    focusTime: '3h 15m',
-    focusPercent: 74.2,
-    status: 'active',
-    apps: ['Photoshop', 'Chrome', 'Slack'],
-    screenshots: 22
-  },
-  {
-    id: '4',
-    employeeId: '4',
-    employeeName: 'David Kim',
-    employeeAvatar: 'DK',
-    startTime: '24/09/2024 09:30',
-    endTime: '24/09/2024 18:15',
-    duration: '8h 45m',
-    focusTime: '7h 30m',
-    focusPercent: 85.7,
-    status: 'completed',
-    apps: ['IntelliJ', 'Chrome', 'Terminal'],
-    screenshots: 52
-  }
-];
-
-// Mock employee details (reusing from employees page)
-const employeeDetails = {
-  '1': {
-    name: 'Sarah Chen',
-    email: 'sarah.chen@company.com',
-    department: 'Engineering',
-    role: 'USER',
-    productivity7d: 92.5,
-    avgFocusHDay: 6.8,
-    status: 'online' as const
-  },
-  '2': {
-    name: 'Mike Johnson',
-    email: 'mike.j@company.com',
-    department: 'Design',
-    role: 'ADMIN',
-    productivity7d: 88.3,
-    avgFocusHDay: 5.9,
-    status: 'online' as const
-  },
-  '3': {
-    name: 'Lisa Wang',
-    email: 'lisa.wang@company.com',
-    department: 'Marketing',
-    role: 'USER',
-    productivity7d: 76.2,
-    avgFocusHDay: 4.8,
-    status: 'away' as const
-  },
-  '4': {
-    name: 'David Kim',
-    email: 'david.kim@company.com',
-    department: 'Engineering',
-    role: 'USER',
-    productivity7d: 94.1,
-    avgFocusHDay: 7.2,
-    status: 'offline' as const
-  }
-};
+interface Session {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeeAvatar: string;
+  startTime: string;
+  endTime: string;
+  duration: string;
+  focusTime: string;
+  focusPercent: number;
+  status: 'active' | 'completed' | 'paused';
+  apps: string[];
+  screenshots: number;
+}
 
 export default function SessionsPage() {
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -127,6 +45,30 @@ export default function SessionsPage() {
     const matchesStatus = statusFilter === 'all' || session.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  useEffect(() => {
+    loadSessions();
+  }, []);
+
+  const loadSessions = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch('/api/sessions');
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch sessions');
+      }
+
+      const data = await response.json();
+      setSessions(data.sessions || []);
+    } catch (err) {
+      console.error('Error loading sessions:', err);
+      setError('Failed to load sessions. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -158,10 +100,10 @@ export default function SessionsPage() {
           </div>
           <div className="flex items-center space-x-3">
             <Badge variant="success">
-              {sessions.filter(s => s.status === 'active').length} Active
+              {loading ? '...' : sessions.filter(s => s.status === 'active').length} Active
             </Badge>
             <Badge variant="info">
-              {sessions.length} Total Today
+              {loading ? '...' : sessions.length} Total Today
             </Badge>
           </div>
         </div>
@@ -212,7 +154,51 @@ export default function SessionsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredSessions.map((session) => (
+              {loading ? (
+                // Loading skeleton
+                Array.from({ length: 4 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell>
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-gray-300 rounded-full animate-pulse"></div>
+                        <div>
+                          <div className="h-4 bg-gray-300 rounded w-32 mb-1 animate-pulse"></div>
+                          <div className="h-3 bg-gray-300 rounded w-16 animate-pulse"></div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-4 bg-gray-300 rounded w-24 mb-1 animate-pulse"></div>
+                      <div className="h-3 bg-gray-300 rounded w-20 animate-pulse"></div>
+                    </TableCell>
+                    <TableCell><div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-4 bg-gray-300 rounded w-12 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-6 bg-gray-300 rounded w-20 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-4 bg-gray-300 rounded w-8 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-6 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-8 bg-gray-300 rounded w-20 animate-pulse"></div></TableCell>
+                  </TableRow>
+                ))
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-8">
+                    <div className="text-danger text-sm">{error}</div>
+                    <Button variant="outline" size="sm" onClick={loadSessions} className="mt-2">
+                      Try Again
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ) : filteredSessions.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-8">
+                    <div className="text-ink-muted">
+                      {searchTerm || statusFilter !== 'all' ? 'No sessions found matching your criteria.' : 'No sessions found.'}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredSessions.map((session) => (
                 <TableRow
                   key={session.id}
                   onClick={() => setSelectedEmployee(session.employeeId)}
@@ -289,13 +275,14 @@ export default function SessionsPage() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+              ))
+              )}
             </TableBody>
           </Table>
         </Card>
 
         {/* Employee Details Sidebar */}
-        {selectedEmployee && employeeDetails[selectedEmployee as keyof typeof employeeDetails] && (
+        {selectedEmployee && (
           <Card className="fixed right-6 top-20 bottom-6 w-96 z-50 overflow-y-auto animate-slide-up">
             <CardHeader className="border-b border-line">
               <div className="flex items-center justify-between">
@@ -311,24 +298,22 @@ export default function SessionsPage() {
             </CardHeader>
             <CardContent>
               {(() => {
-                const employee = employeeDetails[selectedEmployee as keyof typeof employeeDetails];
                 const employeeSessions = sessions.filter(s => s.employeeId === selectedEmployee);
+                const employee = employeeSessions[0];
+
+                if (!employee) return null;
 
                 return (
                   <div className="space-y-6">
                     {/* Employee Info */}
                     <div className="text-center py-4">
                       <Avatar
-                        fallback={employee.name}
-                        status={employee.status}
+                        fallback={employee.employeeAvatar}
                         size="lg"
                         className="mx-auto mb-3"
                       />
-                      <h3 className="text-lg font-semibold text-ink-hi">{employee.name}</h3>
-                      <p className="text-ink-muted">{employee.email}</p>
-                      <Badge variant={employee.role === 'ADMIN' ? 'warning' : 'default'} className="mt-2">
-                        {employee.role}
-                      </Badge>
+                      <h3 className="text-lg font-semibold text-ink-hi">{employee.employeeName}</h3>
+                      <p className="text-ink-muted">Employee ID: {employee.employeeId}</p>
                     </div>
 
                     {/* Today's Sessions */}
@@ -354,15 +339,18 @@ export default function SessionsPage() {
                     {/* Quick Stats */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-raised p-3 rounded-lg">
-                        <div className="text-xs text-ink-muted">Productivity</div>
+                        <div className="text-xs text-ink-muted">Total Sessions</div>
                         <div className="text-lg font-semibold text-ink-hi font-mono">
-                          {employee.productivity7d.toFixed(1)}%
+                          {employeeSessions.length}
                         </div>
                       </div>
                       <div className="bg-raised p-3 rounded-lg">
                         <div className="text-xs text-ink-muted">Avg Focus</div>
                         <div className="text-lg font-semibold text-ink-hi font-mono">
-                          {employee.avgFocusHDay.toFixed(1)}h
+                          {employeeSessions.length > 0 ?
+                            (employeeSessions.reduce((sum, s) => sum + s.focusPercent, 0) / employeeSessions.length).toFixed(1) + '%'
+                            : '0%'
+                          }
                         </div>
                       </div>
                     </div>

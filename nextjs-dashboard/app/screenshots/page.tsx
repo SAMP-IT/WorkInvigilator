@@ -1,148 +1,99 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 
-// Mock screenshot data
-const recentScreenshots = [
-  {
-    id: '1',
-    employeeId: '1',
-    employeeName: 'Sarah Chen',
-    timestamp: '24/09/2024 14:23',
-    url: '/api/screenshots/1',
-    size: '1.2MB',
-    application: 'VS Code'
-  },
-  {
-    id: '2',
-    employeeId: '2',
-    employeeName: 'Mike Johnson',
-    timestamp: '24/09/2024 14:18',
-    url: '/api/screenshots/2',
-    size: '0.9MB',
-    application: 'Figma'
-  },
-  {
-    id: '3',
-    employeeId: '3',
-    employeeName: 'Lisa Wang',
-    timestamp: '24/09/2024 14:15',
-    url: '/api/screenshots/3',
-    size: '1.1MB',
-    application: 'Photoshop'
-  },
-  {
-    id: '4',
-    employeeId: '4',
-    employeeName: 'David Kim',
-    timestamp: '24/09/2024 14:12',
-    url: '/api/screenshots/4',
-    size: '0.8MB',
-    application: 'IntelliJ'
-  },
-  {
-    id: '5',
-    employeeId: '1',
-    employeeName: 'Sarah Chen',
-    timestamp: '24/09/2024 14:08',
-    url: '/api/screenshots/5',
-    size: '1.0MB',
-    application: 'Chrome'
-  },
-  {
-    id: '6',
-    employeeId: '2',
-    employeeName: 'Mike Johnson',
-    timestamp: '24/09/2024 14:05',
-    url: '/api/screenshots/6',
-    size: '1.3MB',
-    application: 'Notion'
-  },
-  {
-    id: '7',
-    employeeId: '3',
-    employeeName: 'Lisa Wang',
-    timestamp: '24/09/2024 14:02',
-    url: '/api/screenshots/7',
-    size: '0.7MB',
-    application: 'Slack'
-  },
-  {
-    id: '8',
-    employeeId: '4',
-    employeeName: 'David Kim',
-    timestamp: '24/09/2024 13:58',
-    url: '/api/screenshots/8',
-    size: '1.1MB',
-    application: 'Terminal'
-  },
-  {
-    id: '9',
-    employeeId: '1',
-    employeeName: 'Sarah Chen',
-    timestamp: '24/09/2024 13:55',
-    url: '/api/screenshots/9',
-    size: '0.9MB',
-    application: 'VS Code'
-  },
-  {
-    id: '10',
-    employeeId: '2',
-    employeeName: 'Mike Johnson',
-    timestamp: '24/09/2024 13:52',
-    url: '/api/screenshots/10',
-    size: '1.4MB',
-    application: 'Figma'
-  }
-];
+interface Screenshot {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  timestamp: string;
+  url: string;
+  size: string;
+  application: string;
+  filename?: string;
+}
 
-// Mock employee list
-const employees = [
-  { id: '1', name: 'Sarah Chen', department: 'Engineering' },
-  { id: '2', name: 'Mike Johnson', department: 'Design' },
-  { id: '3', name: 'Lisa Wang', department: 'Marketing' },
-  { id: '4', name: 'David Kim', department: 'Engineering' }
-];
-
-// Mock employee-specific screenshots
-const getEmployeeScreenshots = (employeeId: string) => {
-  const baseScreenshots = [
-    { timestamp: '24/09/2024 14:23', application: 'VS Code', size: '1.2MB' },
-    { timestamp: '24/09/2024 14:08', application: 'Chrome', size: '1.0MB' },
-    { timestamp: '24/09/2024 13:55', application: 'VS Code', size: '0.9MB' },
-    { timestamp: '24/09/2024 13:42', application: 'Slack', size: '0.8MB' },
-    { timestamp: '24/09/2024 13:30', application: 'Chrome', size: '1.1MB' },
-    { timestamp: '24/09/2024 13:15', application: 'VS Code', size: '1.3MB' },
-    { timestamp: '24/09/2024 13:02', application: 'Terminal', size: '0.7MB' },
-    { timestamp: '24/09/2024 12:48', application: 'Chrome', size: '0.9MB' },
-    { timestamp: '24/09/2024 12:35', application: 'VS Code', size: '1.0MB' },
-    { timestamp: '24/09/2024 12:22', application: 'Slack', size: '0.8MB' },
-    { timestamp: '24/09/2024 12:08', application: 'Chrome', size: '1.2MB' },
-    { timestamp: '24/09/2024 11:55', application: 'VS Code', size: '1.1MB' }
-  ];
-
-  return baseScreenshots.map((screenshot, index) => ({
-    id: `${employeeId}-${index + 1}`,
-    employeeId,
-    ...screenshot
-  }));
-};
+interface Employee {
+  id: string;
+  name: string;
+  department?: string;
+}
 
 export default function ScreenshotsPage() {
+  const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
 
   const displayedScreenshots = selectedEmployee === 'all'
-    ? recentScreenshots
-    : getEmployeeScreenshots(selectedEmployee);
+    ? screenshots
+    : screenshots.filter(s => s.employeeId === selectedEmployee);
 
   const selectedEmployeeName = selectedEmployee === 'all'
     ? 'All Employees'
     : employees.find(emp => emp.id === selectedEmployee)?.name || '';
+
+  useEffect(() => {
+    loadData();
+  }, [selectedEmployee]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Load employees first
+      const employeesResponse = await fetch('/api/employees');
+      if (!employeesResponse.ok) {
+        throw new Error('Failed to fetch employees');
+      }
+      const employeesData = await employeesResponse.json();
+      setEmployees(employeesData.employees || []);
+
+      // Load screenshots
+      const screenshotsUrl = selectedEmployee === 'all'
+        ? '/api/screenshots'
+        : `/api/screenshots?employeeId=${selectedEmployee}`;
+
+      const screenshotsResponse = await fetch(screenshotsUrl);
+      if (!screenshotsResponse.ok) {
+        throw new Error('Failed to fetch screenshots');
+      }
+
+      const screenshotsData = await screenshotsResponse.json();
+      setScreenshots(screenshotsData.screenshots || []);
+    } catch (err) {
+      console.error('Error loading data:', err);
+      setError('Failed to load screenshots. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (screenshotId: string) => {
+    try {
+      const response = await fetch(`/api/screenshots?id=${screenshotId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete screenshot');
+      }
+
+      // Refresh screenshots
+      await loadData();
+      setSelectedScreenshot(null);
+    } catch (err) {
+      console.error('Error deleting screenshot:', err);
+      setError('Failed to delete screenshot. Please try again.');
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -155,7 +106,7 @@ export default function ScreenshotsPage() {
           </div>
           <div className="flex items-center space-x-3">
             <Badge variant="info">
-              {recentScreenshots.length} Today
+              {loading ? '...' : screenshots.length} Total
             </Badge>
             <Button variant="outline">
               Download All
@@ -207,7 +158,35 @@ export default function ScreenshotsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {loading ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <div key={i} className="bg-raised rounded-lg border border-line overflow-hidden">
+                    <div className="aspect-video bg-gray-300 animate-pulse"></div>
+                    <div className="p-3">
+                      <div className="h-4 bg-gray-300 rounded mb-2 animate-pulse"></div>
+                      <div className="h-3 bg-gray-300 rounded mb-1 animate-pulse"></div>
+                      <div className="flex justify-between">
+                        <div className="h-3 bg-gray-300 rounded w-12 animate-pulse"></div>
+                        <div className="h-5 bg-gray-300 rounded w-16 animate-pulse"></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : error ? (
+              <div className="text-center py-8">
+                <div className="text-danger text-sm mb-2">{error}</div>
+                <Button variant="outline" size="sm" onClick={loadData}>
+                  Try Again
+                </Button>
+              </div>
+            ) : displayedScreenshots.length === 0 ? (
+              <div className="text-center py-8 text-ink-muted">
+                {selectedEmployee === 'all' ? 'No screenshots found.' : 'No screenshots found for this employee.'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {displayedScreenshots.map((screenshot) => (
                 <div
                   key={screenshot.id}
@@ -252,9 +231,10 @@ export default function ScreenshotsPage() {
                 </div>
               ))}
             </div>
+            )}
 
             {/* Load More (for employee-specific view) */}
-            {selectedEmployee !== 'all' && displayedScreenshots.length > 10 && (
+            {!loading && selectedEmployee !== 'all' && displayedScreenshots.length > 10 && (
               <div className="flex justify-center mt-6">
                 <Button variant="outline">
                   Load More Screenshots
@@ -265,7 +245,7 @@ export default function ScreenshotsPage() {
         </Card>
 
         {/* Screenshots Stats */}
-        {selectedEmployee !== 'all' && (
+        {!loading && selectedEmployee !== 'all' && displayedScreenshots.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
               <CardContent className="py-4">
@@ -332,7 +312,10 @@ export default function ScreenshotsPage() {
                     <Button variant="outline">
                       View Metadata
                     </Button>
-                    <Button variant="outline">
+                    <Button
+                      variant="outline"
+                      onClick={() => selectedScreenshot && handleDelete(selectedScreenshot)}
+                    >
                       Delete
                     </Button>
                   </div>

@@ -1,96 +1,107 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 
-// Mock employee list
-const employees = [
-  { id: '1', name: 'Sarah Chen', department: 'Engineering' },
-  { id: '2', name: 'Mike Johnson', department: 'Design' },
-  { id: '3', name: 'Lisa Wang', department: 'Marketing' },
-  { id: '4', name: 'David Kim', department: 'Engineering' }
-];
+interface Employee {
+  id: string;
+  name: string;
+  department?: string;
+}
 
-// Mock report data generator
-const generateReportData = (employeeId: string, period: 'daily' | 'weekly' | 'monthly') => {
-  const employee = employees.find(emp => emp.id === employeeId);
-
-  if (period === 'daily') {
-    return {
-      period: 'Today - 24/09/2024',
-      workHours: '8h 15m',
-      focusTime: '6h 45m',
-      productivity: 82.1,
-      sessionsCount: 3,
-      screenshotsCount: 45,
-      applications: [
-        { name: 'VS Code', time: '4h 20m', percentage: 52.7 },
-        { name: 'Chrome', time: '2h 10m', percentage: 26.3 },
-        { name: 'Slack', time: '1h 25m', percentage: 17.2 },
-        { name: 'Other', time: '20m', percentage: 3.8 }
-      ],
-      breakdowns: [
-        { time: '09:00-11:30', activity: 'Development Work', focus: 95 },
-        { time: '11:30-12:00', activity: 'Team Meeting', focus: 75 },
-        { time: '13:00-15:30', activity: 'Code Review', focus: 88 },
-        { time: '15:30-17:30', activity: 'Development Work', focus: 82 }
-      ]
-    };
-  } else if (period === 'weekly') {
-    return {
-      period: 'This Week - 18/09 to 24/09/2024',
-      workHours: '42h 30m',
-      focusTime: '35h 15m',
-      productivity: 83.5,
-      sessionsCount: 15,
-      screenshotsCount: 225,
-      applications: [
-        { name: 'VS Code', time: '22h 15m', percentage: 52.4 },
-        { name: 'Chrome', time: '12h 30m', percentage: 29.4 },
-        { name: 'Slack', time: '5h 45m', percentage: 13.5 },
-        { name: 'Other', time: '2h 0m', percentage: 4.7 }
-      ],
-      dailyBreakdown: [
-        { day: 'Monday', hours: '8h 30m', focus: '7h 10m', productivity: 84.3 },
-        { day: 'Tuesday', hours: '8h 15m', focus: '6h 45m', productivity: 81.8 },
-        { day: 'Wednesday', hours: '8h 45m', focus: '7h 30m', productivity: 85.7 },
-        { day: 'Thursday', hours: '8h 0m', focus: '6h 30m', productivity: 81.3 },
-        { day: 'Friday', hours: '8h 0m', focus: '6h 40m', productivity: 83.3 }
-      ]
-    };
-  } else {
-    return {
-      period: 'This Month - September 2024',
-      workHours: '168h 45m',
-      focusTime: '140h 30m',
-      productivity: 83.3,
-      sessionsCount: 62,
-      screenshotsCount: 890,
-      applications: [
-        { name: 'VS Code', time: '88h 30m', percentage: 52.4 },
-        { name: 'Chrome', time: '48h 15m', percentage: 28.6 },
-        { name: 'Slack', time: '22h 30m', percentage: 13.3 },
-        { name: 'Other', time: '9h 30m', percentage: 5.7 }
-      ],
-      weeklyBreakdown: [
-        { week: 'Week 1', hours: '40h 30m', focus: '33h 45m', productivity: 83.3 },
-        { week: 'Week 2', hours: '42h 15m', focus: '35h 20m', productivity: 83.6 },
-        { week: 'Week 3', hours: '41h 0m', focus: '34h 10m', productivity: 83.4 },
-        { week: 'Week 4', hours: '45h 0m', focus: '37h 15m', productivity: 82.8 }
-      ]
-    };
-  }
-};
+interface ReportData {
+  period: string;
+  workHours: string;
+  focusTime: string;
+  productivity: number;
+  sessionsCount: number;
+  screenshotsCount: number;
+  applications: {
+    name: string;
+    time: string;
+    percentage: number;
+  }[];
+  breakdowns?: {
+    time: string;
+    activity: string;
+    focus: number;
+  }[];
+  dailyBreakdown?: {
+    day: string;
+    hours: string;
+    focus: string;
+    productivity: number;
+  }[];
+  weeklyBreakdown?: {
+    week: string;
+    hours: string;
+    focus: string;
+    productivity: number;
+  }[];
+}
 
 export default function ReportsPage() {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('1');
   const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
   const selectedEmployeeName = employees.find(emp => emp.id === selectedEmployee)?.name || '';
-  const reportData = generateReportData(selectedEmployee, activeTab);
+
+  useEffect(() => {
+    loadEmployees();
+  }, []);
+
+  useEffect(() => {
+    if (selectedEmployee) {
+      loadReportData();
+    }
+  }, [selectedEmployee, activeTab]);
+
+  const loadEmployees = async () => {
+    try {
+      const response = await fetch('/api/employees');
+      if (!response.ok) {
+        throw new Error('Failed to fetch employees');
+      }
+      const data = await response.json();
+      const employeeList = data.employees || [];
+      setEmployees(employeeList);
+
+      // Set first employee as selected if none selected
+      if (employeeList.length > 0 && !selectedEmployee) {
+        setSelectedEmployee(employeeList[0].id);
+      }
+    } catch (err) {
+      console.error('Error loading employees:', err);
+      setError('Failed to load employees.');
+    }
+  };
+
+  const loadReportData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`/api/reports?employeeId=${selectedEmployee}&period=${activeTab}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch report data');
+      }
+
+      const data = await response.json();
+      setReportData(data.report);
+    } catch (err) {
+      console.error('Error loading report data:', err);
+      setError('Failed to load report data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const tabs = [
     { id: 'daily' as const, label: 'Daily Report', icon: '📅' },
@@ -163,17 +174,54 @@ export default function ReportsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-6">
-              {/* Report Header */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-ink-hi">{selectedEmployeeName}</h3>
-                  <p className="text-ink-muted">{reportData.period}</p>
+            {loading ? (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="h-6 bg-gray-300 rounded w-32 mb-2 animate-pulse"></div>
+                    <div className="h-4 bg-gray-300 rounded w-48 animate-pulse"></div>
+                  </div>
+                  <div className="h-8 bg-gray-300 rounded w-24 animate-pulse"></div>
                 </div>
-                <Badge variant="success" size="md">
-                  {reportData.productivity}% Productivity
-                </Badge>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Card key={i} elevated>
+                      <CardContent className="py-4 text-center">
+                        <div className="h-8 bg-gray-300 rounded mb-2 animate-pulse"></div>
+                        <div className="h-4 bg-gray-300 rounded animate-pulse"></div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+                <div className="space-y-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="h-32 bg-gray-300 rounded animate-pulse"></div>
+                  ))}
+                </div>
               </div>
+            ) : error ? (
+              <div className="text-center py-8">
+                <div className="text-danger text-sm mb-2">{error}</div>
+                <Button variant="outline" size="sm" onClick={loadReportData}>
+                  Try Again
+                </Button>
+              </div>
+            ) : !reportData ? (
+              <div className="text-center py-8 text-ink-muted">
+                No report data available.
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Report Header */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-ink-hi">{selectedEmployeeName}</h3>
+                    <p className="text-ink-muted">{reportData.period}</p>
+                  </div>
+                  <Badge variant="success" size="md">
+                    {reportData.productivity}% Productivity
+                  </Badge>
+                </div>
 
               {/* Key Metrics */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -330,7 +378,8 @@ export default function ReportsPage() {
                   📤 Share Report
                 </Button>
               </div>
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
