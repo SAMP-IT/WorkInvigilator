@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 
 export function TopBar() {
   const [dateRange, setDateRange] = useState('Last 7 days');
+  const router = useRouter();
 
   return (
     <div className="flex h-16 items-center justify-between px-6 bg-surface border-b border-line">
@@ -39,13 +41,6 @@ export function TopBar() {
       <div className="flex items-center space-x-4">
         {/* Date range picker */}
         <div className="flex items-center space-x-2">
-          <div className="relative w-4 h-4">
-            <img
-              src="/calendar.png"
-              alt="Calendar"
-              className="w-full h-full object-contain opacity-70"
-            />
-          </div>
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
@@ -72,7 +67,11 @@ export function TopBar() {
               <div className="text-ink-muted text-xs">Admin</div>
             </div>
           </div>
-          <Button variant="ghost" size="sm">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push('/settings')}
+          >
             <div className="relative w-4 h-4">
               <img
                 src="/settings.png"

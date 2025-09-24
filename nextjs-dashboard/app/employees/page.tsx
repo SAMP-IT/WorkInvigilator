@@ -295,14 +295,6 @@ export default function EmployeesPage() {
                       </div>
                     </div>
 
-                    {/* Trend Charts Placeholder */}
-                    <div className="space-y-4">
-                      <h4 className="font-medium text-ink-hi">7-Day Trend</h4>
-                      <div className="h-24 bg-raised rounded-lg flex items-center justify-center">
-                        <span className="text-ink-muted text-sm">📈 Mini Chart</span>
-                      </div>
-                    </div>
-
                     {/* Screenshots Gallery */}
                     <div className="space-y-4">
                       <h4 className="font-medium text-ink-hi">Recent Screenshots</h4>

@@ -28,6 +28,11 @@ const navigationItems = [
     icon: "/screenshots.png",
   },
   {
+    name: "Audio",
+    href: "/audio",
+    icon: "/audio.png",
+  },
+  {
     name: "Reports",
     href: "/reports",
     icon: "/report.png",
