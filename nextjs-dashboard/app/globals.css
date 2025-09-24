@@ -1,26 +1,256 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap');
 
+/* Executive Slate Design System CSS Variables */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Dark Mode (Primary) */
+  --bg: #0B0F14;
+  --surface: #11161C;
+  --surface-raised: #141B22;
+  --line: #1F2730;
+
+  --text-hi: #E7EDF3;
+  --text-mid: #AAB4BF;
+  --text-muted: #7A8794;
+
+  --primary: #3B82F6;
+  --info: #6366F1;
+  --success: #10B981;
+  --warn: #F59E0B;
+  --danger: #EF4444;
+
+  /* Light Mode Variants */
+  --bg-light: #F7F8FA;
+  --surface-light: #FFFFFF;
+  --line-light: #E6E8EB;
+  --text-hi-light: #0B0F14;
+  --text-mid-light: #374151;
+  --text-muted-light: #6B7280;
+
+  /* Typography - Executive Slate Font System */
+  --font-ui: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Shadows */
+  --shadow-card: 0 1px 1px rgba(0,0,0,.04), 0 10px 30px rgba(0,0,0,.18);
+  --shadow-hover: 0 2px 6px rgba(0,0,0,.08), 0 16px 40px rgba(0,0,0,.22);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Light mode overrides */
+[data-theme="light"] {
+  --bg: var(--bg-light);
+  --surface: var(--surface-light);
+  --line: var(--line-light);
+  --text-hi: var(--text-hi-light);
+  --text-mid: var(--text-mid-light);
+  --text-muted: var(--text-muted-light);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Base styles with Executive Slate Typography */
+* {
+  box-sizing: border-box;
+}
+
+/* Micro-typography that makes it look custom */
+html {
+  font-family: var(--font-ui);
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg);
+  color: var(--text-hi);
+  font-family: var(--font-ui);
+  font-weight: 500; /* Public Sans reads great slightly heavier on dark */
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* Typography refinements */
+h1, h2, h3 {
+  letter-spacing: -0.012em;
+  font-weight: 600;
+}
+
+h1 {
+  font-weight: 650; /* Hero weight */
+}
+
+/* Numeric typography for engineered look */
+.kpi, .num, .axis, .cell-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums slashed-zero lining-nums;
+  letter-spacing: 0.01em;
+}
+
+/* Small caps for labels and chips */
+.smallcaps {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Image optimization styles */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Navigation icon hover effects */
+.nav-icon-hover {
+  transition: all 0.2s ease-out;
+}
+
+.nav-icon-hover:hover {
+  filter: brightness(1.1) contrast(1.05);
+  transform: scale(1.05);
+}
+
+/* Selection styles */
+::selection {
+  background-color: var(--primary);
+  color: white;
+}
+
+/* Focus styles */
+.focus-ring:focus {
+  outline: 2px solid #60A5FA;
+  outline-offset: 2px;
+}
+
+/* Utility classes */
+.text-hi { color: var(--text-hi); }
+.text-mid { color: var(--text-mid); }
+.text-muted { color: var(--text-muted); }
+
+.bg-surface { background-color: var(--surface); }
+.bg-raised { background-color: var(--surface-raised); }
+
+.border-line { border-color: var(--line); }
+
+/* Animation classes */
+.animate-count-up {
+  animation: countUp 0.8s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.2s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: all 0.2s ease-out;
+}
+
+.card-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-hover);
+}
+
+/* KPI tile styles */
+.kpi-tile {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.2s ease-out;
+}
+
+.kpi-tile:hover {
+  background: var(--surface-raised);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-hover);
+}
+
+/* Density utilities */
+.density-compact {
+  line-height: 1.25;
+}
+
+.density-comfortable {
+  line-height: 1.5;
+}
+
+/* Keyframes */
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(-1px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ripple {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
 }

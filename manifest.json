@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Work Vigilator Extension",
+  "name": "Work Invigilator Extension",
   "version": "1.0",
   "description": "Professional work monitoring extension with audio recording and screenshots",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp84b/GFN18fDfBBwhpvez5oeJULanVrzaWYTkEVq8Brn4NIV3L/5CfLaHh8EfUHREIaR0sjsmi5OMR7GlSAvYhrhRHMxBINHeLSecFdR2wR4xiy31FJfijJSHAeQPxZsDK5XOxv8ITyDhwJbvstaKHH4d57eR9OsJ9TOEBDvuKMciH614DIpshuRdBvZKx0YJD9pUy+y/KS1Qk4GqKY/aLJj4x3soNzsHuBbxzZ3g5/tIPp79RcJRhQiVbhNT7T0OemEPGffDkScxUlgEfFS0SFqFITi2edXgswMVLkDkKe12Rq0GsKuFIU7VABXAW9daypVwV8mFGXfAZMESTc5yQIDAQAB",
@@ -12,7 +12,8 @@
     "activeTab",
     "storage",
     "alarms",
-    "tabs"
+    "tabs",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://*/*",
@@ -22,8 +23,10 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html",
-    "default_title": "Audio Recorder"
+    "default_title": "Work Invigilator"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"

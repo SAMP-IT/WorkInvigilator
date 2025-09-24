@@ -92,13 +92,13 @@ class UIManager {
       this.mainApp.mainToggleBtn.classList.remove('toggle-off');
       this.mainApp.mainToggleBtn.classList.add('toggle-on');
       this.mainApp.toggleIcon.textContent = '🟢';
-      this.mainApp.toggleStatus.textContent = 'Work Vigilator ON';
+      this.mainApp.toggleStatus.textContent = 'Work Invigilator ON';
       this.mainApp.toggleSubtitle.textContent = 'Tap to stop monitoring';
     } else {
       this.mainApp.mainToggleBtn.classList.remove('toggle-on');
       this.mainApp.mainToggleBtn.classList.add('toggle-off');
       this.mainApp.toggleIcon.textContent = '🔴';
-      this.mainApp.toggleStatus.textContent = 'Work Vigilator OFF';
+      this.mainApp.toggleStatus.textContent = 'Work Invigilator OFF';
       this.mainApp.toggleSubtitle.textContent = 'Tap to start monitoring';
     }
   }

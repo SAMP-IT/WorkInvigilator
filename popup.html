@@ -1,134 +1,170 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Work Vigilator - Audio Recorder</title>
-  <link rel="stylesheet" href="popup.css">
-</head>
-<body>
-  <div class="container">
-    <h1>🎙️📸 Work Vigilator</h1>
-
-    <!-- Authentication Section -->
-    <div id="auth-section" class="auth-section">
-      <div id="user-info" class="user-info hidden">
-        <div class="user-details">
-          <span id="user-email" class="user-email"></span>
-          <span id="user-role" class="user-role"></span>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Work Invigilator - Executive Dashboard</title>
+    <!-- Executive Slate Font System -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300..800;1,300..800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300..800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header with Logo -->
+      <div class="header">
+        <div class="logo-section">
+          <img src="target.png" alt="Work Invigilator" class="logo-icon" />
+          <div class="logo-text">
+            <h1 class="app-title">Work Invigilator</h1>
+          </div>
         </div>
-        <div class="user-actions">
-          <button id="admin-dashboard-btn" class="btn btn-primary btn-small admin-btn hidden">
-            <span class="btn-icon">🏢</span>
-            Admin Dashboard
+      </div>
+
+      <!-- Authentication Section -->
+      <div id="auth-section" class="auth-section">
+        <div id="user-info" class="user-info hidden">
+          <div class="user-details">
+            <span id="user-email" class="user-email"></span>
+            <span id="user-role" class="user-role"></span>
+          </div>
+          <div class="user-actions">
+            <button id="logout-btn" class="btn btn-secondary btn-small">
+              Logout
+            </button>
+          </div>
+        </div>
+
+        <div id="auth-forms" class="auth-forms">
+          <div class="auth-card">
+            <div class="auth-header">
+              <h3 class="auth-title">Employee Login</h3>
+              <p class="auth-subtitle">
+                Use the credentials provided by your administrator
+              </p>
+            </div>
+
+            <form id="login-form" class="auth-form">
+              <div class="form-group">
+                <input
+                  type="email"
+                  id="login-email"
+                  class="form-input"
+                  placeholder="Email provided by admin"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <input
+                  type="password"
+                  id="login-password"
+                  class="form-input"
+                  placeholder="Password provided by admin"
+                  required
+                />
+              </div>
+              <button type="submit" class="btn btn-primary btn-full">
+                Login to Start Monitoring
+              </button>
+            </form>
+
+            <div id="auth-message" class="auth-message"></div>
+
+            <div class="auth-footer">
+              <p class="footer-text">
+                Don't have credentials? Contact your administrator
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Monitoring Interface (hidden until authenticated) -->
+      <div id="main-interface" class="main-interface hidden">
+        <div class="status">
+          <div id="status-text">Ready to record</div>
+          <div id="recording-time" class="hidden">00:00:00</div>
+          <div id="permission-status" class="permission-info hidden">
+            <span id="mic-icon">🎤</span>
+            <span id="permission-text">Microphone: Checking...</span>
+          </div>
+        </div>
+
+        <div class="main-toggle">
+          <button id="main-toggle-btn" class="toggle-btn toggle-off">
+            <div class="toggle-content">
+              <span id="toggle-icon" class="toggle-icon">🔴</span>
+              <div class="toggle-text">
+                <div id="toggle-status" class="toggle-status">
+                  Work Invigilator OFF
+                </div>
+                <div id="toggle-subtitle" class="toggle-subtitle">
+                  Tap to start monitoring
+                </div>
+              </div>
+            </div>
           </button>
-          <button id="logout-btn" class="btn btn-secondary btn-small">Logout</button>
-        </div>
-      </div>
 
-      <div id="auth-forms" class="auth-forms">
-        <div class="auth-header">
-          <h3 style="text-align: center; margin-bottom: 1rem; color: #4a5568;">Employee Login</h3>
-          <p style="text-align: center; font-size: 0.875rem; color: #718096; margin-bottom: 1.5rem;">
-            Use the credentials provided by your administrator
-          </p>
-        </div>
+          <div id="monitoring-status" class="monitoring-status hidden">
+            <div class="status-item">
+              <span class="status-icon">🎤</span>
+              <span id="audio-status">Audio: Ready</span>
+            </div>
+            <div class="status-item">
+              <span class="status-icon">📸</span>
+              <span id="screenshot-status">Screenshots: Ready</span>
+            </div>
+            <div class="status-item">
+              <span class="status-icon">⏱️</span>
+              <span id="session-timer">00:00:00</span>
+            </div>
 
-        <form id="login-form" class="auth-form">
-          <div class="form-group">
-            <input type="email" id="login-email" placeholder="Email provided by admin" required>
-          </div>
-          <div class="form-group">
-            <input type="password" id="login-password" placeholder="Password provided by admin" required>
-          </div>
-          <button type="submit" class="btn btn-primary">Login to Start Monitoring</button>
-        </form>
-
-        <div id="auth-message" class="auth-message"></div>
-
-        <div class="auth-footer">
-          <p style="text-align: center; font-size: 0.75rem; color: #a0aec0; margin-top: 1rem;">
-            Don't have credentials? Contact your administrator
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Main Monitoring Interface (hidden until authenticated) -->
-    <div id="main-interface" class="main-interface hidden">
-    <div class="status">
-      <div id="status-text">Ready to record</div>
-      <div id="recording-time" class="hidden">00:00:00</div>
-      <div id="permission-status" class="permission-info hidden">
-        <span id="mic-icon">🎤</span>
-        <span id="permission-text">Microphone: Checking...</span>
-      </div>
-    </div>
-
-    <div class="main-toggle">
-      <button id="main-toggle-btn" class="toggle-btn toggle-off">
-        <div class="toggle-content">
-          <span id="toggle-icon" class="toggle-icon">🔴</span>
-          <div class="toggle-text">
-            <div id="toggle-status" class="toggle-status">Work Vigilator OFF</div>
-            <div id="toggle-subtitle" class="toggle-subtitle">Tap to start monitoring</div>
+            <!-- Break Toggle -->
+            <div class="break-toggle-container">
+              <button id="break-toggle-btn" class="break-toggle-btn break-off">
+                <span id="break-icon">☕</span>
+                <span id="break-text">Take Break</span>
+              </button>
+            </div>
           </div>
         </div>
-      </button>
 
-      <div id="monitoring-status" class="monitoring-status hidden">
-        <div class="status-item">
-          <span class="status-icon">🎤</span>
-          <span id="audio-status">Audio: Ready</span>
-        </div>
-        <div class="status-item">
-          <span class="status-icon">📸</span>
-          <span id="screenshot-status">Screenshots: Ready</span>
-        </div>
-        <div class="status-item">
-          <span class="status-icon">⏱️</span>
-          <span id="session-timer">00:00:00</span>
-        </div>
-
-        <!-- Break Toggle -->
-        <div class="break-toggle-container">
-          <button id="break-toggle-btn" class="break-toggle-btn break-off">
-            <span id="break-icon">☕</span>
-            <span id="break-text">Take Break</span>
+        <div class="quick-actions hidden" id="quick-actions">
+          <button id="capture-now-btn" class="btn btn-secondary btn-small">
+            <span class="btn-icon">📸</span>
+            Quick Capture
+          </button>
+          <button id="play-last-btn" class="btn btn-secondary btn-small">
+            <span class="btn-icon">▶️</span>
+            Play Last Recording
           </button>
         </div>
+
+        <div class="waveform-container" id="waveform-container">
+          <div class="waveform-placeholder">
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+          </div>
+        </div>
+
+        <div class="recordings-list" id="recordings-list">
+          <h3>Previous Recordings</h3>
+          <div id="recordings"></div>
+        </div>
       </div>
+      <!-- End main-interface -->
     </div>
+    <!-- End container -->
 
-    <div class="quick-actions hidden" id="quick-actions">
-      <button id="capture-now-btn" class="btn btn-secondary btn-small">
-        <span class="btn-icon">📸</span>
-        Quick Capture
-      </button>
-      <button id="play-last-btn" class="btn btn-secondary btn-small">
-        <span class="btn-icon">▶️</span>
-        Play Last Recording
-      </button>
-    </div>
-
-    <div class="waveform-container" id="waveform-container">
-      <div class="waveform-placeholder">
-        <div class="wave-bar"></div>
-        <div class="wave-bar"></div>
-        <div class="wave-bar"></div>
-        <div class="wave-bar"></div>
-        <div class="wave-bar"></div>
-      </div>
-    </div>
-
-    <div class="recordings-list" id="recordings-list">
-      <h3>Previous Recordings</h3>
-      <div id="recordings"></div>
-    </div>
-    </div> <!-- End main-interface -->
-
-  </div> <!-- End container -->
-
-  <script src="popup.js"></script>
-</body>
+    <script src="popup.js"></script>
+  </body>
 </html>

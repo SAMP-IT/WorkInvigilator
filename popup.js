@@ -134,7 +134,7 @@ class AudioRecorder {
       console.log('💾 Monitoring state saved');
 
       this.ui.updateToggleUI('on');
-      this.ui.updateStatus('Work Vigilator activated - Monitoring started');
+      this.ui.updateStatus('Work Invigilator activated - Monitoring started');
       console.log('🎛️ Toggle UI updated to ON');
 
       this.startSessionTimer();
@@ -172,7 +172,7 @@ class AudioRecorder {
 
     this.ui.updateToggleUI('off');
     this.ui.updateBreakUI('off');
-    this.ui.updateStatus('Work Vigilator deactivated - Monitoring stopped');
+    this.ui.updateStatus('Work Invigilator deactivated - Monitoring stopped');
   }
 
   startSessionTimer() {

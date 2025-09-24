@@ -1,10 +1,11 @@
-# 🎙️📸 Work Vigilator Chrome Extension
+# 🎙️📸 Work Invigilator Chrome Extension
 
 A comprehensive Chrome extension with user authentication that records audio from your laptop microphone and captures screenshots automatically, perfect for work monitoring and productivity tracking with role-based access control.
 
 ## Features
 
 ### 🎤 Audio Recording
+
 - 🎤 Record audio from your laptop microphone
 - ⏱️ Real-time recording timer
 - 💾 Save recordings locally in your browser
@@ -13,6 +14,7 @@ A comprehensive Chrome extension with user authentication that records audio fro
 - 🗑️ Delete unwanted recordings
 
 ### 📸 Screenshot Capture
+
 - 📷 Capture screenshots of your active tab every minute
 - 🔄 Automatic interval-based capturing
 - 👁️ View screenshots in new tabs
@@ -21,6 +23,7 @@ A comprehensive Chrome extension with user authentication that records audio fro
 - ⏰ Keeps last 20 screenshots (auto-cleanup after 7 days)
 
 ### 🔐 Authentication & User Management
+
 - 🔐 Supabase-powered authentication
 - 👥 Role-based access control (User/Admin)
 - 📧 Email verification and password reset
@@ -28,6 +31,7 @@ A comprehensive Chrome extension with user authentication that records audio fro
 - 🚪 Secure logout functionality
 
 ### 🎨 User Experience
+
 - 🎨 Beautiful gradient UI with animated waveform
 - 📱 Responsive design
 - ⚡ Real-time permission status display
@@ -64,6 +68,7 @@ A comprehensive Chrome extension with user authentication that records audio fro
 5. **Login** with your credentials
 
 ### 🚀 One-Click Monitoring
+
 1. **Click the extension icon** in your Chrome toolbar
 2. **Tap the big red "Work Vigilator OFF" button** to start monitoring
 3. **Grant microphone permission** when prompted (first-time only)
@@ -71,6 +76,7 @@ A comprehensive Chrome extension with user authentication that records audio fro
 5. **Tap "Work Vigilator ON"** to stop all monitoring
 
 ### ☕ Break Management
+
 - **"Take Break" button** appears when monitoring is active
 - **Tap to pause** both audio and screenshot recording
 - **Button turns gray** and shows "On Break - Tap to Resume"
@@ -80,6 +86,7 @@ A comprehensive Chrome extension with user authentication that records audio fro
 ### 👥 User Roles & Permissions
 
 - **USER Role**: Full access to monitoring features
+
   - Audio recording and screenshot capture
   - Break/pause functionality
   - File management and downloads
@@ -90,7 +97,9 @@ A comprehensive Chrome extension with user authentication that records audio fro
   - System configuration (future feature)
 
 ### 📊 Real-Time Status
+
 When monitoring is active, you'll see:
+
 - **🟢 Green toggle button** - Monitoring active
 - **Session timer** - How long monitoring has been running
 - **Audio status** - Recording status with elapsed time
@@ -99,10 +108,12 @@ When monitoring is active, you'll see:
 - **Role indicator** - Shows your current role (USER/ADMIN)
 
 ### 🔧 Quick Actions (When Monitoring)
+
 - **"Quick Capture"** - Take an instant screenshot anytime
 - **"Play Last Recording"** - Listen to your most recent audio recording
 
 ### 📋 Managing Files
+
 - **Audio recordings** are saved as WebM files
 - **Screenshots** are saved as PNG files
 - **Both are stored locally** in your browser
@@ -110,6 +121,7 @@ When monitoring is active, you'll see:
 - **Manual deletion** available for individual files
 
 ### 🔄 Session Persistence
+
 - **UI State**: Toggle button remembers monitoring status when reopening popup
 - **Break State**: Break/pause status is preserved across popup sessions
 - **Background Processes**: Audio recording and screenshots continue in background
@@ -119,6 +131,7 @@ When monitoring is active, you'll see:
 ## Permissions
 
 The extension requires the following permissions:
+
 - `microphone`: Runtime permission for audio recording
 - `storage`: To save recordings and screenshots locally in your browser
 - `activeTab`: To capture screenshots of the currently active tab
@@ -181,25 +194,30 @@ The extension requires the following permissions:
 ## Troubleshooting
 
 ### Microphone Not Working
+
 1. Check if Chrome has microphone permission
 2. Try refreshing the extension
 3. Check if another application is using the microphone
 
 ### Extension Not Loading
+
 1. Ensure all required icon files exist
 2. Check the console for errors: `chrome://extensions/` → enable "Developer mode" → click "background page" under your extension
 
 ### Recordings Not Saving
+
 1. Check browser storage space
 2. Clear browser data if storage is full
 
 ### Screenshots Not Working
+
 1. Ensure you're on a regular web page (not chrome:// pages)
 2. Check that the active tab has content to capture
 3. Screenshots only capture the visible area of the active tab
 4. Cannot capture across multiple applications or full desktop
 
 ### Screenshot Quality Issues
+
 1. Screenshots are compressed to 80% quality for storage efficiency
 2. Only the visible portion of the active tab is captured
 3. Browser zoom level may affect screenshot quality

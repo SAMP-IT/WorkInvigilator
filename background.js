@@ -1,4 +1,4 @@
-// Background script for Work Vigilator Extension
+// Background script for Work Invigilator Extension
 // Handles Supabase operations using direct HTTP calls (no external libraries needed)
 
 // Supabase configuration
@@ -36,6 +36,9 @@ chrome.runtime.onInstalled.addListener((details) => {
     // Clear any stale monitoring state on install
     chrome.storage.local.remove(['monitoringState']);
 
+    // Enable side panel for all sites
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+
     // Optional: Pre-request microphone permission on first install
     // This opens a welcome page where users can grant microphone access upfront
     chrome.tabs.create({
@@ -44,6 +47,9 @@ chrome.runtime.onInstalled.addListener((details) => {
     });
   } else if (details.reason === 'update') {
     console.log('Audio Recorder Extension updated');
+
+    // Enable side panel on update as well
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 
     // On update, we can keep monitoring state if it's recent
     // But clear very old state (more than 1 hour old)
@@ -63,10 +69,12 @@ chrome.runtime.onInstalled.addListener((details) => {
   }
 });
 
-// Handle extension icon click (could be used for additional features)
+// Handle extension icon click - opens side panel
 chrome.action.onClicked.addListener(async (tab) => {
-  // This could be used for future features like recording from active tab
-  console.log('Extension icon clicked on tab:', tab.title);
+  console.log('Extension icon clicked, opening side panel for tab:', tab.title);
+
+  // Open side panel for the current tab
+  await chrome.sidePanel.open({ windowId: tab.windowId });
 });
 
 // Clean up old recordings periodically (optional feature)

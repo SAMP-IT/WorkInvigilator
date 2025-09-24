@@ -1,4 +1,4 @@
-# Work Vigilator - Git Ignore File
+# Work Invigilator - Git Ignore File
 
 # Environment Variables - NEVER COMMIT THESE!
 .env

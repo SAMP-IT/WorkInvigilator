@@ -35,8 +35,8 @@ class StorageManager {
         this.mainApp.startSessionTimer();
 
         const statusMsg = this.mainApp.isOnBreak
-          ? '✅ Work Vigilator active (on break - restored from previous session)'
-          : '✅ Work Vigilator active (restored from previous session)';
+          ? '✅ Work Invigilator active (on break - restored from previous session)'
+          : '✅ Work Invigilator active (restored from previous session)';
         this.mainApp.ui.updateStatus(statusMsg);
       }
     });
