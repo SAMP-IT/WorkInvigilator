@@ -96,20 +96,73 @@ export async function GET(request: NextRequest) {
       ? `This Week - ${startDate.toLocaleDateString('en-GB')} to ${endDate.toLocaleDateString('en-GB')}`
       : `This Month - ${startDate.toLocaleDateString('en-GB')} to ${endDate.toLocaleDateString('en-GB')}`
 
+    // Get break sessions for more accurate calculations
+    const { data: breakSessions } = await supabase
+      .from('break_sessions')
+      .select('*')
+      .eq('user_id', employeeId)
+      .gte('break_start_time', startDate.toISOString())
+      .lte('break_start_time', endDate.toISOString())
+
+    // Calculate break time
+    const totalBreakSeconds = breakSessions?.reduce((sum, b) => {
+      if (b.break_start_time && b.break_end_time) {
+        const breakDuration = new Date(b.break_end_time).getTime() - new Date(b.break_start_time).getTime()
+        return sum + Math.floor(breakDuration / 1000)
+      }
+      return sum + (b.break_duration_ms ? Math.floor(b.break_duration_ms / 1000) : 0)
+    }, 0) || 0
+
+    // Calculate application usage (currently using generic categories)
+    const applications = [
+      {
+        name: 'Productive Applications',
+        time: formatTime(totalFocusSeconds),
+        percentage: totalWorkSeconds > 0 ? Math.round((totalFocusSeconds / totalWorkSeconds) * 100) : 0
+      },
+      {
+        name: 'Other Applications',
+        time: formatTime(totalWorkSeconds - totalFocusSeconds),
+        percentage: totalWorkSeconds > 0 ? Math.round(((totalWorkSeconds - totalFocusSeconds) / totalWorkSeconds) * 100) : 0
+      }
+    ].filter(app => app.percentage > 0)
+
+    // Enhanced insights
+    const insights = {
+      averageSessionDuration: sessions && sessions.length > 0 ? formatTime(Math.floor(totalWorkSeconds / sessions.length)) : '0m',
+      longestSession: sessions && sessions.length > 0 ?
+        formatTime(Math.max(...sessions.map(s => s.total_duration_seconds || 0))) : '0m',
+      totalBreakTime: formatTime(totalBreakSeconds),
+      screenshotsPerHour: totalWorkSeconds > 0 ?
+        Math.round((screenshotsCount || 0) / (totalWorkSeconds / 3600)) : 0,
+      productivityTrend: 'stable', // TODO: Calculate actual trend
+      mostProductiveTime: '10:00-12:00' // TODO: Calculate from session data
+    }
+
     // Build response based on period
     const reportData = {
-      employeeName: employee.name,
+      employeeName: employee.name || employee.email,
       employeeEmail: employee.email,
-      department: employee.department,
+      department: employee.department || 'General',
       period: periodLabel,
       workHours: formatTime(totalWorkSeconds),
       focusTime: formatTime(totalFocusSeconds),
+      breakTime: formatTime(totalBreakSeconds),
       productivity: Number(avgProductivity.toFixed(1)),
       sessionsCount: sessions?.length || 0,
       screenshotsCount: screenshotsCount || 0,
-      applications: [
-        { name: 'Work Applications', time: formatTime(totalWorkSeconds), percentage: 100 }
-      ]
+      breakSessionsCount: breakSessions?.length || 0,
+      applications,
+      insights,
+      summary: {
+        totalWorkHours: Number((totalWorkSeconds / 3600).toFixed(1)),
+        totalFocusHours: Number((totalFocusSeconds / 3600).toFixed(1)),
+        totalBreakHours: Number((totalBreakSeconds / 3600).toFixed(1)),
+        efficiencyRatio: totalWorkSeconds > 0 ?
+          Number(((totalFocusSeconds / totalWorkSeconds) * 100).toFixed(1)) : 0,
+        workLifeBalance: totalBreakSeconds > 0 && totalWorkSeconds > 0 ?
+          Number(((totalBreakSeconds / totalWorkSeconds) * 100).toFixed(1)) : 0
+      }
     }
 
     // Add period-specific breakdowns

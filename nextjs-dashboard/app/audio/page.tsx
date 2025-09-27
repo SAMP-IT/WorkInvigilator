@@ -36,16 +36,22 @@ export default function AudioPage() {
 
   async function loadEmployees() {
     try {
-      const { data: employeesData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'user')
-        .order('email', { ascending: true });
+      // Use the new audio API to get employees with recording counts
+      const response = await fetch('/api/audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'getEmployees' })
+      });
 
-      setEmployees(employeesData || []);
+      if (response.ok) {
+        const data = await response.json();
+        setEmployees(data.employees || []);
 
-      if (employeesData && employeesData.length > 0 && !selectedEmployee) {
-        setSelectedEmployee(employeesData[0].id);
+        if (data.employees && data.employees.length > 0 && !selectedEmployee) {
+          setSelectedEmployee(data.employees[0].id);
+        }
+      } else {
+        console.error('Failed to load employees');
       }
     } catch (error) {
       console.error('Error loading employees:', error);
@@ -58,32 +64,29 @@ export default function AudioPage() {
     try {
       setLoading(true);
 
-      // Load recordings for the selected employee
-      const { data: recordingsData } = await supabase
-        .from('recordings')
-        .select('*')
-        .eq('user_id', employeeId)
-        .order('created_at', { ascending: false });
+      // Use the new centralized audio API
+      const response = await fetch(`/api/audio?employeeId=${employeeId}&limit=50`);
 
-      setRecordings(recordingsData || []);
+      if (response.ok) {
+        const data = await response.json();
+        setRecordings(data.recordings || []);
 
-      // Create user email mapping
-      if (recordingsData && recordingsData.length > 0) {
-        const userIds = [...new Set(recordingsData.map(r => r.user_id))];
-        const { data: userProfiles } = await supabase
-          .from('profiles')
-          .select('id, email')
-          .in('id', userIds);
-
+        // Create user email mapping from the recordings data
         const emailMap: { [key: string]: string } = {};
-        userProfiles?.forEach(profile => {
-          emailMap[profile.id] = profile.email;
+        data.recordings?.forEach((recording: any) => {
+          if (recording.user_id && recording.employeeName) {
+            emailMap[recording.user_id] = recording.employeeName;
+          }
         });
         setUserEmailMap(emailMap);
+      } else {
+        console.error('Failed to load recordings');
+        setRecordings([]);
       }
 
     } catch (error) {
       console.error('Error loading recordings:', error);
+      setRecordings([]);
     } finally {
       setLoading(false);
     }
@@ -172,19 +175,30 @@ export default function AudioPage() {
                             {recording.filename}
                           </h3>
                           <Badge size="sm" variant="outline">
-                            {formatDuration(recording.duration)}
+                            {recording.durationFormatted || formatDuration(recording.duration)}
                           </Badge>
-                          <Badge size="sm" variant="outline">
-                            {formatFileSize(recording.file_size)}
-                          </Badge>
+                          {recording.type && (
+                            <Badge size="sm" variant={recording.type === 'complete' ? 'success' : 'info'}>
+                              {recording.type === 'complete' ? 'Complete' : 'Chunked'}
+                            </Badge>
+                          )}
+                          {recording.session_info && (
+                            <Badge size="sm" variant="outline">
+                              {recording.session_info.total_chunks} chunks
+                            </Badge>
+                          )}
                         </div>
 
                         <div className="flex items-center space-x-4 text-xs text-ink-muted">
-                          <span>Employee: {userEmailMap[recording.user_id] || 'Unknown'}</span>
+                          <span>Employee: {recording.employeeName || userEmailMap[recording.user_id] || 'Unknown'}</span>
                           <span>•</span>
-                          <span>Created: {new Date(recording.created_at).toLocaleDateString()}</span>
-                          <span>•</span>
-                          <span>Time: {new Date(recording.created_at).toLocaleTimeString()}</span>
+                          <span>Created: {recording.timestamp || new Date(recording.created_at).toLocaleDateString()}</span>
+                          {recording.type === 'chunked' && recording.session_info && (
+                            <>
+                              <span>•</span>
+                              <span>Session: {new Date(recording.session_info.session_start_time).toLocaleDateString()}</span>
+                            </>
+                          )}
                         </div>
                       </div>
 

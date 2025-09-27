@@ -16,8 +16,11 @@ export interface EmployeeFormData {
   name: string;
   email: string;
   password: string;
+  confirmPassword: string;
   department: string;
   role: 'USER' | 'ADMIN';
+  shiftStartTime: string;
+  shiftEndTime: string;
 }
 
 export function AddEmployeeForm({ onSubmit, onCancel, loading = false }: AddEmployeeFormProps) {
@@ -25,11 +28,16 @@ export function AddEmployeeForm({ onSubmit, onCancel, loading = false }: AddEmpl
     name: '',
     email: '',
     password: '',
+    confirmPassword: '',
     department: '',
-    role: 'USER'
+    role: 'USER',
+    shiftStartTime: '09:00',
+    shiftEndTime: '18:00'
   });
 
   const [errors, setErrors] = useState<Partial<EmployeeFormData>>({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const validateForm = (): boolean => {
     const newErrors: Partial<EmployeeFormData> = {};
@@ -50,8 +58,22 @@ export function AddEmployeeForm({ onSubmit, onCancel, loading = false }: AddEmpl
       newErrors.password = 'Password must be at least 6 characters';
     }
 
+    if (!formData.confirmPassword.trim()) {
+      newErrors.confirmPassword = 'Confirm password is required';
+    } else if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+
     if (!formData.department.trim()) {
       newErrors.department = 'Department is required';
+    }
+
+    if (!formData.shiftStartTime) {
+      newErrors.shiftStartTime = 'Start time is required';
+    }
+
+    if (!formData.shiftEndTime) {
+      newErrors.shiftEndTime = 'End time is required';
     }
 
     setErrors(newErrors);
@@ -124,16 +146,59 @@ export function AddEmployeeForm({ onSubmit, onCancel, loading = false }: AddEmpl
           <label className="block text-sm font-medium text-ink-hi mb-2">
             Password
           </label>
-          <Input
-            type="password"
-            value={formData.password}
-            onChange={(e) => handleInputChange('password', e.target.value)}
-            placeholder="Minimum 6 characters"
-            error={!!errors.password}
-            disabled={loading}
-          />
+          <div className="relative">
+            <Input
+              type={showPassword ? "text" : "password"}
+              value={formData.password}
+              onChange={(e) => handleInputChange('password', e.target.value)}
+              placeholder="Minimum 6 characters"
+              error={!!errors.password}
+              disabled={loading}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              className="absolute inset-y-0 right-0 flex items-center pr-3"
+              onClick={() => setShowPassword(!showPassword)}
+              disabled={loading}
+            >
+              <span className="text-ink-muted hover:text-ink-hi">
+                {showPassword ? "👁️" : "👁️‍🗨️"}
+              </span>
+            </button>
+          </div>
           {errors.password && (
             <p className="text-danger text-xs mt-1">{errors.password}</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-ink-hi mb-2">
+            Confirm Password
+          </label>
+          <div className="relative">
+            <Input
+              type={showConfirmPassword ? "text" : "password"}
+              value={formData.confirmPassword}
+              onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+              placeholder="Confirm password"
+              error={!!errors.confirmPassword}
+              disabled={loading}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              className="absolute inset-y-0 right-0 flex items-center pr-3"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              disabled={loading}
+            >
+              <span className="text-ink-muted hover:text-ink-hi">
+                {showConfirmPassword ? "👁️" : "👁️‍🗨️"}
+              </span>
+            </button>
+          </div>
+          {errors.confirmPassword && (
+            <p className="text-danger text-xs mt-1">{errors.confirmPassword}</p>
           )}
           <p className="text-ink-muted text-xs mt-1">
             Employee will be able to change this password after first login
@@ -158,6 +223,39 @@ export function AddEmployeeForm({ onSubmit, onCancel, loading = false }: AddEmpl
           {errors.department && (
             <p className="text-danger text-xs mt-1">{errors.department}</p>
           )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-ink-hi mb-2">
+              Shift Start Time
+            </label>
+            <Input
+              type="time"
+              value={formData.shiftStartTime}
+              onChange={(e) => handleInputChange('shiftStartTime', e.target.value)}
+              error={!!errors.shiftStartTime}
+              disabled={loading}
+            />
+            {errors.shiftStartTime && (
+              <p className="text-danger text-xs mt-1">{errors.shiftStartTime}</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-ink-hi mb-2">
+              Shift End Time
+            </label>
+            <Input
+              type="time"
+              value={formData.shiftEndTime}
+              onChange={(e) => handleInputChange('shiftEndTime', e.target.value)}
+              error={!!errors.shiftEndTime}
+              disabled={loading}
+            />
+            {errors.shiftEndTime && (
+              <p className="text-danger text-xs mt-1">{errors.shiftEndTime}</p>
+            )}
+          </div>
         </div>
 
         <div>

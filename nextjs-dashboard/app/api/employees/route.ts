@@ -3,71 +3,118 @@ import { supabase } from '@/lib/supabase'
 
 export async function GET(request: NextRequest) {
   try {
-    // Get all employee profiles with their productivity metrics
-    const { data: employees } = await supabase
+    console.log('API: Starting employee fetch...') // Debug log
+
+    // Get all employee profiles (both users and admins can see all employees)
+    const { data: employees, error: employeesError } = await supabase
       .from('profiles')
       .select('*')
+      .in('role', ['user', 'admin']) // Include both users and admins
       .order('created_at', { ascending: false })
 
-    // Get productivity metrics for each employee (last 7 days average)
+    console.log('API: Raw employees data:', employees) // Debug log
+    console.log('API: Error:', employeesError) // Debug log
+
+    if (employeesError) {
+      console.error('Error fetching employees:', employeesError)
+      return NextResponse.json(
+        { error: 'Failed to fetch employees data', details: employeesError },
+        { status: 500 }
+      )
+    }
+
+    if (!employees || employees.length === 0) {
+      console.log('API: No employees found') // Debug log
+      return NextResponse.json({
+        employees: [],
+        totalCount: 0
+      })
+    }
+
+    // Calculate real metrics for each employee
     const employeesWithMetrics = await Promise.all(
-      (employees || []).map(async (employee) => {
-        // Get recent sessions for this employee
+      employees.map(async (employee) => {
+        // Get last 7 days of sessions for productivity calculation
+        const sevenDaysAgo = new Date()
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+        // Get employee sessions from last 7 days
         const { data: sessions } = await supabase
           .from('recording_sessions')
-          .select('id, total_duration_seconds, session_start_time, session_end_time')
+          .select('*')
           .eq('user_id', employee.id)
-          .gte('session_start_time', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+          .gte('session_start_time', sevenDaysAgo.toISOString())
+          .order('session_start_time', { ascending: false })
 
-        // Get productivity metrics
+        // Get productivity metrics from last 7 days
         const { data: metrics } = await supabase
           .from('productivity_metrics')
-          .select('productivity_percentage, focus_time_seconds, total_time_seconds')
+          .select('*')
           .eq('user_id', employee.id)
-          .gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+          .gte('date', sevenDaysAgo.toISOString().split('T')[0])
 
-        // Calculate averages or use fallback values
-        const avgProductivity = metrics && metrics.length > 0
-          ? metrics.reduce((sum, m) => sum + (m.productivity_percentage || 0), 0) / metrics.length
-          : Math.random() * 20 + 75 // Fallback to realistic random value
+        // Check if user has active session
+        const { data: activeSessions } = await supabase
+          .from('recording_sessions')
+          .select('*')
+          .eq('user_id', employee.id)
+          .is('session_end_time', null)
+          .limit(1)
 
-        const avgFocusTime = metrics && metrics.length > 0
-          ? metrics.reduce((sum, m) => sum + (m.focus_time_seconds || 0), 0) / metrics.length / 3600
-          : Math.random() * 3 + 4 // 4-7 hours average
+        // Calculate metrics
+        const totalWorkSeconds = sessions?.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0) || 0
+        const totalFocusSeconds = metrics?.reduce((sum, m) => sum + (m.focus_time_seconds || 0), 0) ||
+          Math.floor(totalWorkSeconds * 0.85) // Fallback: assume 85% focus time
 
-        const avgSessionLength = sessions && sessions.length > 0
-          ? sessions.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0) / sessions.length / 60
-          : Math.random() * 60 + 90 // 90-150 minutes average
+        const productivity7d = totalWorkSeconds > 0 ?
+          Number(((totalFocusSeconds / totalWorkSeconds) * 100).toFixed(1)) : 0
 
-        // Determine online status (if they have a session in last hour)
-        const recentSession = sessions?.some(s =>
-          !s.session_end_time ||
-          new Date(s.session_end_time).getTime() > Date.now() - 60 * 60 * 1000
-        )
+        const avgFocusHDay = totalFocusSeconds > 0 ?
+          Number((totalFocusSeconds / (7 * 3600)).toFixed(1)) : 0
+
+        const avgSessionMin = sessions && sessions.length > 0 ?
+          Math.round((totalWorkSeconds / sessions.length) / 60) : 0
+
+        // Determine last active time
+        let lastActive = 'Never'
+        if (sessions && sessions.length > 0) {
+          const lastSession = sessions[0]
+          const lastActiveTime = new Date(lastSession.session_start_time)
+          const now = new Date()
+          const hoursDiff = Math.round((now.getTime() - lastActiveTime.getTime()) / (1000 * 60 * 60))
+
+          if (hoursDiff < 1) {
+            lastActive = 'Less than 1 hour ago'
+          } else if (hoursDiff < 24) {
+            lastActive = `${hoursDiff} hours ago`
+          } else {
+            const daysDiff = Math.round(hoursDiff / 24)
+            lastActive = `${daysDiff} day${daysDiff > 1 ? 's' : ''} ago`
+          }
+        }
+
+        // Determine status (online if has active session)
+        const status = activeSessions && activeSessions.length > 0 ? 'online' : 'offline'
 
         return {
           id: employee.id,
-          name: employee.name || 'Unknown Employee',
+          name: employee.name || employee.email.split('@')[0],
           email: employee.email,
           department: employee.department || 'General',
-          role: employee.role.toUpperCase(),
-          productivity7d: Number(avgProductivity.toFixed(1)),
-          avgFocusHDay: Number(avgFocusTime.toFixed(1)),
-          avgSessionMin: Math.round(avgSessionLength),
-          lastActive: sessions && sessions.length > 0
-            ? new Date(sessions[0].session_start_time).toLocaleString('en-GB', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })
-            : 'Never',
-          status: recentSession ? 'online' : 'offline',
-          createdAt: employee.created_at
+          role: employee.role || 'user',
+          productivity7d,
+          avgFocusHDay,
+          avgSessionMin,
+          lastActive,
+          status: status as 'online' | 'offline',
+          createdAt: employee.created_at,
+          shiftStartTime: employee.shift_start_time,
+          shiftEndTime: employee.shift_end_time
         }
       })
     )
+
+    console.log('API: Returning employees with real metrics:', employeesWithMetrics.length) // Debug log
 
     return NextResponse.json({
       employees: employeesWithMetrics,
@@ -85,7 +132,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { name, email, password, department, role } = await request.json()
+    const { name, email, password, department, role, shiftStartTime, shiftEndTime } = await request.json()
 
     if (!name || !email || !password) {
       return NextResponse.json(
@@ -94,43 +141,89 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create user via the existing create-user endpoint
-    const createUserResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/create-user`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    })
+    console.log('Creating user account...', { email, name })
 
-    const createUserResult = await createUserResponse.json()
-
-    if (!createUserResponse.ok) {
-      return NextResponse.json(createUserResult, { status: createUserResponse.status })
-    }
-
-    // Update the profile with additional information
-    const { data: updatedProfile, error } = await supabase
+    // Check if user already exists in profiles
+    const { data: existingProfile } = await supabase
       .from('profiles')
-      .update({
-        name,
-        department,
-        role,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', createUserResult.user.id)
-      .select()
+      .select('email')
+      .eq('email', email)
       .single()
 
-    if (error) {
-      console.error('Error updating profile:', error)
+    if (existingProfile) {
       return NextResponse.json(
-        { error: 'Employee created but profile update failed' },
+        { error: 'User with this email already exists' },
+        { status: 400 }
+      )
+    }
+
+    // Generate a UUID for the new user
+    const userId = crypto.randomUUID()
+
+    // Try to create user with regular signup first
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+          role: role || 'user'
+        }
+      }
+    })
+
+    if (signUpError) {
+      console.error('Sign up error:', signUpError)
+      return NextResponse.json(
+        { error: `Failed to create user: ${signUpError.message}` },
+        { status: 400 }
+      )
+    }
+
+    if (!signUpData.user) {
+      return NextResponse.json(
+        { error: 'User creation failed - no user returned' },
         { status: 500 }
       )
     }
 
+    console.log('User signed up:', signUpData.user.id)
+
+    // Now create/update the profile
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: signUpData.user.id,
+        email,
+        name,
+        department: department || 'General',
+        role: (role || 'user').toLowerCase(),
+        shift_start_time: shiftStartTime || null,
+        shift_end_time: shiftEndTime || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (profileError) {
+      console.error('Profile creation error:', profileError)
+      return NextResponse.json(
+        { error: `Failed to create profile: ${profileError.message}` },
+        { status: 500 }
+      )
+    }
+
+    console.log('Employee created successfully:', profile)
+
     return NextResponse.json({
-      employee: updatedProfile,
-      message: 'Employee created successfully'
+      employee: profile,
+      user: {
+        id: signUpData.user.id,
+        email: signUpData.user.email,
+        emailConfirmed: signUpData.user.email_confirmed_at ? true : false
+      },
+      message: 'Employee created successfully!'
     })
 
   } catch (error) {

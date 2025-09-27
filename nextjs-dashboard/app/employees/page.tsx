@@ -28,8 +28,10 @@ interface Employee {
   avgFocusHDay: number;
   avgSessionMin: number;
   lastActive: string;
-  status: 'online' | 'offline' | 'away';
+  status: 'online' | 'offline';
   createdAt: string;
+  shiftStartTime?: string;
+  shiftEndTime?: string;
 }
 
 export default function EmployeesPage() {
@@ -62,6 +64,7 @@ export default function EmployeesPage() {
       }
 
       const data = await response.json();
+      console.log('Employees page - loaded data:', data); // Debug log
       setEmployees(data.employees || []);
     } catch (err) {
       console.error('Error loading employees:', err);

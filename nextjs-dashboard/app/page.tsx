@@ -11,37 +11,110 @@ import { Modal } from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
 import type { Profile } from "@/lib/supabase";
 
+interface EmployeeWithMetrics {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+  role: string;
+  productivity7d: number;
+  avgFocusHDay: number;
+  avgSessionMin: number;
+  lastActive: string;
+  status: 'online' | 'offline';
+  createdAt: string;
+}
+
+interface Screenshot {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  timestamp: string;
+  url: string;
+  size: string;
+  application: string;
+  filename: string;
+}
+
 export default function HomePage() {
   const router = useRouter();
-  const [employees, setEmployees] = useState<Profile[]>([]);
+  const [employees, setEmployees] = useState<EmployeeWithMetrics[]>([]);
+  const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedEmployee, setSelectedEmployee] = useState<Profile | null>(
+  const [selectedEmployee, setSelectedEmployee] = useState<EmployeeWithMetrics | null>(
     null
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    loadEmployees();
+    loadData();
   }, []);
 
-  async function loadEmployees() {
+  async function loadData() {
     try {
-      const { data: employeesData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("role", "user")
-        .order("created_at", { ascending: false })
-        .limit(4);
+      // Load dashboard metrics (optimized for dashboard use)
+      const dashboardResponse = await fetch('/api/dashboard?period=today');
+      if (dashboardResponse.ok) {
+        const dashboardData = await dashboardResponse.json();
+        console.log('Dashboard data loaded:', dashboardData); // Debug log
 
-      setEmployees(employeesData || []);
+        // Set screenshots from dashboard data
+        setScreenshots(dashboardData.recentScreenshots || []);
+
+        // Create employees array from dashboard data for compatibility
+        const employeesFromDashboard = dashboardData.topPerformers?.map((performer: any) => ({
+          id: performer.employeeId,
+          name: performer.name,
+          email: performer.email,
+          productivity7d: performer.productivity,
+          avgFocusHDay: performer.focusHours,
+          avgSessionMin: Math.round(performer.workHours * 60),
+          status: 'offline' as const // Will be updated by separate call if needed
+        })) || [];
+
+        setEmployees(employeesFromDashboard);
+      } else {
+        console.error('Failed to load dashboard data:', dashboardResponse.status);
+
+        // Fallback to individual API calls
+        await loadDataFallback();
+      }
     } catch (error) {
-      console.error("Error loading employees:", error);
+      console.error("Error loading dashboard data:", error);
+      // Fallback to individual API calls
+      await loadDataFallback();
     } finally {
       setLoading(false);
     }
   }
 
-  const openEmployeeModal = (employee: Profile) => {
+  async function loadDataFallback() {
+    try {
+      // Load employees with metrics (fallback)
+      const employeesResponse = await fetch('/api/employees');
+      if (employeesResponse.ok) {
+        const employeesData = await employeesResponse.json();
+        console.log('Employees loaded (fallback):', employeesData); // Debug log
+        setEmployees(employeesData.employees || []);
+      } else {
+        console.error('Failed to load employees:', employeesResponse.status);
+      }
+
+      // Load recent screenshots (fallback)
+      const screenshotsResponse = await fetch('/api/screenshots?limit=4');
+      if (screenshotsResponse.ok) {
+        const screenshotsData = await screenshotsResponse.json();
+        console.log('Screenshots loaded (fallback):', screenshotsData); // Debug log
+        setScreenshots(screenshotsData.screenshots || []);
+      } else {
+        console.error('Failed to load screenshots:', screenshotsResponse.status);
+      }
+    } catch (error) {
+      console.error("Error in fallback data loading:", error);
+    }
+  }
+
+  const openEmployeeModal = (employee: EmployeeWithMetrics) => {
     setSelectedEmployee(employee);
     setIsModalOpen(true);
   };
@@ -74,42 +147,48 @@ export default function HomePage() {
           <KpiTile
             icon={<KpiIcon src="/sessions.png" alt="Active Sessions" />}
             label="Active Sessions"
-            value={12}
+            value={employees.filter(emp => emp.status === 'online').length}
             delta={{ value: 8.2, direction: "up" }}
             onClick={() => router.push("/sessions")}
           />
           <KpiTile
             icon={<KpiIcon src="/employees.png" alt="Active Employees" />}
             label="Active Employees"
-            value={34}
+            value={employees.length}
             delta={{ value: 2.1, direction: "up" }}
             onClick={() => router.push("/employees")}
           />
           <KpiTile
             icon={<KpiIcon src="/productivity.png" alt="Productivity" />}
             label="Productivity %"
-            value="87.4%"
+            value={employees.length > 0 ?
+              `${(employees.reduce((sum, emp) => sum + emp.productivity7d, 0) / employees.length).toFixed(1)}%` :
+              "0%"}
             delta={{ value: 3.2, direction: "up" }}
             onClick={() => router.push("/reports")}
           />
           <KpiTile
             icon={<KpiIcon src="/focus.png" alt="Focus Time" />}
             label="Avg Focus Time"
-            value="6.2h"
+            value={employees.length > 0 ?
+              `${(employees.reduce((sum, emp) => sum + emp.avgFocusHDay, 0) / employees.length).toFixed(1)}h` :
+              "0h"}
             delta={{ value: 1.5, direction: "down" }}
             onClick={() => router.push("/reports")}
           />
           <KpiTile
             icon={<KpiIcon src="/sessions.png" alt="Average Session" />}
             label="Avg Session"
-            value="142min"
+            value={employees.length > 0 ?
+              `${Math.round(employees.reduce((sum, emp) => sum + emp.avgSessionMin, 0) / employees.length)}min` :
+              "0min"}
             delta={{ value: 0, direction: "flat" }}
             onClick={() => router.push("/reports")}
           />
           <KpiTile
             icon={<KpiIcon src="/screenshots.png" alt="Screenshots" />}
             label="Screenshots Today"
-            value={1247}
+            value={screenshots.length}
             delta={{ value: 12.3, direction: "up" }}
             onClick={() => router.push("/screenshots")}
           />
@@ -141,7 +220,7 @@ export default function HomePage() {
                     </div>
                   ))
                 ) : employees.length > 0 ? (
-                  employees.map((employee, i) => (
+                  employees.slice(0, 4).map((employee, i) => (
                     <div
                       key={employee.id}
                       className="flex items-center justify-between p-3 bg-raised rounded-lg"
@@ -150,13 +229,13 @@ export default function HomePage() {
                         className="flex items-center space-x-3 cursor-pointer flex-1"
                         onClick={() => openEmployeeModal(employee)}
                       >
-                        <div className="w-2 h-2 bg-success rounded-full animate-pulse"></div>
+                        <div className={`w-2 h-2 rounded-full ${employee.status === 'online' ? 'bg-success animate-pulse' : 'bg-gray-400'}`}></div>
                         <div>
                           <p className="text-sm font-medium text-ink-hi hover:text-primary transition-colors">
-                            {employee.email.split("@")[0]}
+                            {employee.name || employee.email.split("@")[0]}
                           </p>
                           <p className="text-xs text-ink-muted">
-                            Session: {45 + i * 12}min
+                            Session: {employee.avgSessionMin}min
                           </p>
                         </div>
                       </div>
@@ -186,42 +265,34 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {[
-                  {
-                    name: "Sarah Chen",
-                    change: "+23%",
-                    direction: "up" as const,
-                  },
-                  {
-                    name: "Mike Johnson",
-                    change: "+18%",
-                    direction: "up" as const,
-                  },
-                  {
-                    name: "Lisa Wang",
-                    change: "-12%",
-                    direction: "down" as const,
-                  },
-                  {
-                    name: "David Kim",
-                    change: "-8%",
-                    direction: "down" as const,
-                  },
-                ].map((item, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between p-2"
-                  >
-                    <span className="text-sm text-ink-hi">{item.name}</span>
-                    <div
-                      className={`text-sm font-medium ${
-                        item.direction === "up" ? "text-success" : "text-danger"
-                      }`}
-                    >
-                      {item.direction === "up" ? "↗" : "↘"} {item.change}
-                    </div>
+                {employees.length > 0 ? (
+                  employees
+                    .sort((a, b) => b.productivity7d - a.productivity7d)
+                    .slice(0, 4)
+                    .map((employee, i) => {
+                      const change = employee.productivity7d - 75; // Mock baseline of 75%
+                      const direction = change >= 0 ? "up" : "down";
+                      return (
+                        <div
+                          key={employee.id}
+                          className="flex items-center justify-between p-2"
+                        >
+                          <span className="text-sm text-ink-hi">{employee.name || employee.email.split("@")[0]}</span>
+                          <div
+                            className={`text-sm font-medium ${
+                              direction === "up" ? "text-success" : "text-danger"
+                            }`}
+                          >
+                            {direction === "up" ? "↗" : "↘"} {change >= 0 ? "+" : ""}{change.toFixed(1)}%
+                          </div>
+                        </div>
+                      );
+                    })
+                ) : (
+                  <div className="text-center py-4 text-ink-muted">
+                    <p className="text-sm">No employee data available</p>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>
@@ -233,17 +304,39 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-2">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="aspect-video bg-raised rounded border border-line flex items-center justify-center"
-                  >
-                    <div className="text-center text-ink-muted">
-                      <div className="text-lg">📸</div>
-                      <p className="text-xs">Screenshot {i + 1}</p>
+                {screenshots.length > 0 ? (
+                  screenshots.slice(0, 4).map((screenshot, i) => (
+                    <div
+                      key={screenshot.id}
+                      className="aspect-video bg-raised rounded border border-line flex items-center justify-center overflow-hidden"
+                    >
+                      {screenshot.url ? (
+                        <img
+                          src={screenshot.url}
+                          alt={`Screenshot by ${screenshot.employeeName}`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-center text-ink-muted">
+                          <div className="text-lg">📸</div>
+                          <p className="text-xs">{screenshot.employeeName}</p>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="aspect-video bg-raised rounded border border-line flex items-center justify-center"
+                    >
+                      <div className="text-center text-ink-muted">
+                        <div className="text-lg">📸</div>
+                        <p className="text-xs">No Screenshot</p>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
               <div className="mt-3 text-center">
                 <Badge
@@ -252,7 +345,7 @@ export default function HomePage() {
                   className="cursor-pointer hover:bg-primary hover:text-white"
                   onClick={() => router.push("/screenshots")}
                 >
-                  View All (247)
+                  View All ({screenshots.length})
                 </Badge>
               </div>
             </CardContent>
@@ -279,7 +372,7 @@ export default function HomePage() {
             <div className="space-y-4">
               <div>
                 <h3 className="text-lg font-medium text-ink-hi mb-2">
-                  {selectedEmployee.email.split("@")[0]}
+                  {selectedEmployee.name || selectedEmployee.email.split("@")[0]}
                 </h3>
                 <p className="text-sm text-ink-muted">
                   {selectedEmployee.email}

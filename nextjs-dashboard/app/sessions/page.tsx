@@ -31,40 +31,86 @@ interface Session {
   screenshots: number;
 }
 
+interface Employee {
+  id: string;
+  name: string;
+  email: string;
+  shiftStartTime?: string;
+  shiftEndTime?: string;
+}
+
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [sessionFilter, setSessionFilter] = useState('all');
+
+  const getSessionType = (employeeId: string) => {
+    const employee = employees.find(emp => emp.id === employeeId);
+    if (!employee || !employee.shiftStartTime || !employee.shiftEndTime) return 'all';
+
+    const startTime = employee.shiftStartTime;
+    const endTime = employee.shiftEndTime;
+
+    // Morning Session: 9:00 AM to 6:00 PM
+    if (startTime >= '09:00' && endTime <= '18:00') return 'morning';
+    // Afternoon Session: 12:00 PM to 9:00 PM
+    if (startTime >= '12:00' && endTime <= '21:00') return 'afternoon';
+    // Evening Session: 5:30 PM to 2:30 AM
+    if ((startTime >= '17:30' && endTime >= '17:30') || (startTime >= '17:30' && endTime <= '02:30')) return 'evening';
+
+    return 'all';
+  };
 
   const filteredSessions = sessions.filter(session => {
     const matchesSearch = session.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          session.apps.some(app => app.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus = statusFilter === 'all' || session.status === statusFilter;
-    return matchesSearch && matchesStatus;
+
+    let matchesSession = true;
+    if (sessionFilter !== 'all') {
+      const sessionType = getSessionType(session.employeeId);
+      matchesSession = sessionType === sessionFilter;
+    }
+
+    return matchesSearch && matchesStatus && matchesSession;
   });
 
   useEffect(() => {
-    loadSessions();
+    loadData();
   }, []);
 
-  const loadSessions = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('/api/sessions');
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch sessions');
+      // Load sessions
+      const sessionsResponse = await fetch('/api/sessions');
+      if (sessionsResponse.ok) {
+        const sessionsData = await sessionsResponse.json();
+        console.log('Sessions loaded:', sessionsData); // Debug log
+        setSessions(sessionsData.sessions || []);
+      } else {
+        console.error('Failed to load sessions:', sessionsResponse.status);
       }
 
-      const data = await response.json();
-      setSessions(data.sessions || []);
+      // Load employees with session timing
+      const employeesResponse = await fetch('/api/employees');
+      if (employeesResponse.ok) {
+        const employeesData = await employeesResponse.json();
+        console.log('Sessions page - employees loaded:', employeesData); // Debug log
+        setEmployees(employeesData.employees || []);
+      } else {
+        console.error('Failed to load employees:', employeesResponse.status);
+      }
     } catch (err) {
-      console.error('Error loading sessions:', err);
-      setError('Failed to load sessions. Please try again.');
+      console.error('Error loading data:', err);
+      setError('Failed to load data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -121,11 +167,21 @@ export default function SessionsPage() {
                 />
               </div>
               <select
+                value={sessionFilter}
+                onChange={(e) => setSessionFilter(e.target.value)}
+                className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="all">All Sessions</option>
+                <option value="morning">Morning Session</option>
+                <option value="afternoon">Afternoon Session</option>
+                <option value="evening">Evening Session</option>
+              </select>
+              <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <option value="all">All Sessions</option>
+                <option value="all">All Status</option>
                 <option value="active">Active</option>
                 <option value="completed">Completed</option>
                 <option value="paused">Paused</option>
@@ -184,7 +240,7 @@ export default function SessionsPage() {
                 <TableRow>
                   <TableCell colSpan={9} className="text-center py-8">
                     <div className="text-danger text-sm">{error}</div>
-                    <Button variant="outline" size="sm" onClick={loadSessions} className="mt-2">
+                    <Button variant="outline" size="sm" onClick={loadData} className="mt-2">
                       Try Again
                     </Button>
                   </TableCell>

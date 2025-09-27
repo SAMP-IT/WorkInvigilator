@@ -60,10 +60,15 @@ export async function GET(request: NextRequest) {
     })
 
     // Get summary statistics
-    const { count: totalCount } = await supabase
+    let countQuery = supabase
       .from('screenshots')
       .select('*', { count: 'exact', head: true })
-      .eq(employeeId && employeeId !== 'all' ? 'user_id' : 'id', employeeId && employeeId !== 'all' ? employeeId : screenshot => true)
+
+    if (employeeId && employeeId !== 'all') {
+      countQuery = countQuery.eq('user_id', employeeId)
+    }
+
+    const { count: totalCount } = await countQuery
 
     return NextResponse.json({
       screenshots: formattedScreenshots,
