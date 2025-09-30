@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('*')
+        .select('*, organizations(id, name)')
         .eq('id', userId)
         .single()
 
@@ -68,14 +68,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('No profile found, creating default profile...')
           const { data: user } = await supabase.auth.getUser()
           if (user.user) {
+            // Get or create default organization
+            const { data: defaultOrg } = await supabase
+              .from('organizations')
+              .select('id')
+              .eq('name', 'Default Organization')
+              .single()
+
             const { data: newProfile, error: createError } = await supabase
               .from('profiles')
               .insert({
                 id: userId,
                 email: user.user.email,
-                role: 'admin' // Default to admin for manual signups
+                role: 'admin', // Default to admin for manual signups
+                organization_id: defaultOrg?.id || null
               })
-              .select()
+              .select('*, organizations(id, name)')
               .single()
 
             if (createError) {

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Avatar } from '@/components/ui/Avatar';
+import { useAuth } from '@/lib/auth-context';
 
 interface UserSettings {
   id: string;
@@ -29,6 +30,7 @@ interface UserSettings {
 }
 
 export default function SettingsPage() {
+  const { profile, user } = useAuth();
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,25 +51,33 @@ export default function SettingsPage() {
   ];
 
   useEffect(() => {
-    loadSettings();
-  }, []);
+    if (profile?.organization_id && user?.id) {
+      loadSettings();
+    }
+  }, [profile, user]);
 
   const loadSettings = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/settings');
+      if (!profile?.organization_id || !user?.id) {
+        setError('User not authenticated');
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch(`/api/settings?userId=${user.id}&organizationId=${profile.organization_id}`);
       if (!response.ok) {
         throw new Error('Failed to fetch settings');
       }
 
       const data = await response.json();
-      setSettings(data.settings);
+      setSettings(data.currentUser);
       setFormData({
-        name: data.settings.name || '',
-        email: data.settings.email || '',
-        department: data.settings.department || ''
+        name: data.currentUser?.name || '',
+        email: data.currentUser?.email || '',
+        department: data.currentUser?.department || ''
       });
     } catch (err) {
       console.error('Error loading settings:', err);

@@ -80,6 +80,7 @@ class StorageManager {
         .from('break_sessions')
         .insert([{
           user_id: this.mainApp.currentUser.id,
+          organization_id: this.mainApp.organizationId,
           break_date: today,
           break_start_time: new Date(this.mainApp.breakStartTime).toISOString(),
           break_end_time: new Date().toISOString(),

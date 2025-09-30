@@ -16,8 +16,7 @@
     "sidePanel"
   ],
   "host_permissions": [
-    "https://*/*",
-    "http://*/*"
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
@@ -38,7 +37,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["welcome.html", "supabase-config.js"],
+      "resources": ["welcome.html", "supabase-config.js", "supabase-browser.js"],
       "matches": ["<all_urls>"]
     }
   ]

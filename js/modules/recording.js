@@ -164,6 +164,7 @@ class RecordingManager {
         .from('recording_chunks')
         .insert([{
           user_id: this.mainApp.currentUser.id,
+          organization_id: this.mainApp.organizationId,
           session_start_time: new Date(this.audioStartTime).toISOString(),
           chunk_number: chunkNumber,
           filename: filename,
@@ -202,6 +203,7 @@ class RecordingManager {
         .from('recording_sessions')
         .insert([{
           user_id: this.mainApp.currentUser.id,
+          organization_id: this.mainApp.organizationId,
           session_start_time: new Date(this.audioStartTime).toISOString(),
           session_end_time: new Date().toISOString(),
           total_duration_seconds: sessionDuration,

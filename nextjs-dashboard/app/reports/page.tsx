@@ -5,6 +5,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/lib/auth-context';
 
 interface Employee {
   id: string;
@@ -44,28 +45,165 @@ interface ReportData {
 }
 
 export default function ReportsPage() {
+  const { profile } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedEmployee, setSelectedEmployee] = useState<string>('1');
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
   const selectedEmployeeName = employees.find(emp => emp.id === selectedEmployee)?.name || '';
 
-  useEffect(() => {
-    loadEmployees();
-  }, []);
+  const exportToPDF = () => {
+    if (!reportData) return;
+
+    // Create printable content
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Report - ${selectedEmployeeName}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; }
+          h1 { color: #333; }
+          h2 { color: #666; margin-top: 30px; }
+          .header { border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+          .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 20px 0; }
+          .metric { border: 1px solid #ddd; padding: 15px; text-align: center; }
+          .metric-value { font-size: 24px; font-weight: bold; color: #333; }
+          .metric-label { color: #666; font-size: 12px; margin-top: 5px; }
+          .section { margin: 30px 0; }
+          .app-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th, td { text-align: left; padding: 10px; border-bottom: 1px solid #ddd; }
+          th { background-color: #f5f5f5; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Employee Productivity Report</h1>
+          <p><strong>Employee:</strong> ${selectedEmployeeName}</p>
+          <p><strong>Period:</strong> ${reportData.period}</p>
+          <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+        </div>
+
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-value">${reportData.workHours}</div>
+            <div class="metric-label">Total Work Hours</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">${reportData.focusTime}</div>
+            <div class="metric-label">Focus Time</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">${reportData.sessionsCount}</div>
+            <div class="metric-label">Work Sessions</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">${reportData.screenshotsCount}</div>
+            <div class="metric-label">Screenshots</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Productivity Score</h2>
+          <p style="font-size: 32px; font-weight: bold; color: #22c55e;">${reportData.productivity}%</p>
+        </div>
+
+        <div class="section">
+          <h2>Application Usage</h2>
+          ${reportData.applications.map(app => `
+            <div class="app-item">
+              <span>${app.name}</span>
+              <span>${app.time} (${app.percentage}%)</span>
+            </div>
+          `).join('')}
+        </div>
+
+        ${reportData.breakdowns ? `
+          <div class="section">
+            <h2>Activity Breakdown</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Activity</th>
+                  <th>Focus</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${reportData.breakdowns.map(item => `
+                  <tr>
+                    <td>${item.time}</td>
+                    <td>${item.activity}</td>
+                    <td>${item.focus}%</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
+
+        ${reportData.dailyBreakdown ? `
+          <div class="section">
+            <h2>Daily Breakdown</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Day</th>
+                  <th>Hours</th>
+                  <th>Focus</th>
+                  <th>Productivity</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${reportData.dailyBreakdown.map(item => `
+                  <tr>
+                    <td>${item.day}</td>
+                    <td>${item.hours}</td>
+                    <td>${item.focus}</td>
+                    <td>${item.productivity}%</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
+      </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
 
   useEffect(() => {
-    if (selectedEmployee) {
+    if (profile?.organization_id) {
+      loadEmployees();
+    }
+  }, [profile]);
+
+  useEffect(() => {
+    if (selectedEmployee && profile?.organization_id) {
       loadReportData();
     }
-  }, [selectedEmployee, activeTab]);
+  }, [selectedEmployee, activeTab, profile]);
 
   const loadEmployees = async () => {
     try {
-      const response = await fetch('/api/employees');
+      if (!profile?.organization_id) {
+        return;
+      }
+
+      const response = await fetch(`/api/employees?organizationId=${profile.organization_id}`);
       if (!response.ok) {
         throw new Error('Failed to fetch employees');
       }
@@ -73,8 +211,8 @@ export default function ReportsPage() {
       const employeeList = data.employees || [];
       setEmployees(employeeList);
 
-      // Set first employee as selected if none selected
-      if (employeeList.length > 0 && !selectedEmployee) {
+      // Set first employee as selected
+      if (employeeList.length > 0) {
         setSelectedEmployee(employeeList[0].id);
       }
     } catch (err) {
@@ -88,7 +226,13 @@ export default function ReportsPage() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/reports?employeeId=${selectedEmployee}&period=${activeTab}`);
+      if (!profile?.organization_id) {
+        setError('No organization found');
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch(`/api/reports?employeeId=${selectedEmployee}&period=${activeTab}&organizationId=${profile.organization_id}`);
       if (!response.ok) {
         throw new Error('Failed to fetch report data');
       }
@@ -119,10 +263,7 @@ export default function ReportsPage() {
             <p className="text-ink-muted">Comprehensive productivity and activity reports</p>
           </div>
           <div className="flex items-center space-x-3">
-            <Button variant="outline">
-              📧 Email Report
-            </Button>
-            <Button>
+            <Button onClick={exportToPDF} disabled={!reportData}>
               📥 Export PDF
             </Button>
           </div>

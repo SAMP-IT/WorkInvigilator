@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
+    const organizationId = searchParams.get('organizationId')
 
     if (!userId) {
       return NextResponse.json(
@@ -13,8 +14,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'Organization ID is required' },
+        { status: 400 }
+      )
+    }
+
     // Get current user profile
-    const { data: profile } = await supabase
+    const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('*')
       .eq('id', userId)
@@ -27,15 +35,17 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get organization stats
-    const { count: totalEmployees } = await supabase
+    // Get organization stats filtered by organization
+    const { count: totalEmployees } = await supabaseAdmin
       .from('profiles')
       .select('*', { count: 'exact', head: true })
       .eq('role', 'user')
+      .eq('organization_id', organizationId)
 
-    const { count: activeEmployees } = await supabase
+    const { count: activeEmployees } = await supabaseAdmin
       .from('recording_sessions')
       .select('user_id', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
       .is('session_end_time', null)
 
     // Return user settings and organization info
@@ -88,7 +98,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update user profile
-    const { data: updatedProfile, error } = await supabase
+    const { data: updatedProfile, error } = await supabaseAdmin
       .from('profiles')
       .update({
         name,

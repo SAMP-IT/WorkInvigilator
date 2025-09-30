@@ -12,6 +12,11 @@ export interface Profile {
   role: 'admin' | 'user'
   created_at: string
   updated_at: string
+  organization_id?: string
+  organizations?: {
+    id: string
+    name: string
+  }
 }
 
 export interface Recording {

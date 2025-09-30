@@ -17,6 +17,7 @@ import {
   TableCell
 } from '@/components/ui/Table';
 import { AddEmployeeForm, type EmployeeFormData } from '@/components/forms/AddEmployeeForm';
+import { useAuth } from '@/lib/auth-context';
 
 interface Employee {
   id: string;
@@ -25,7 +26,7 @@ interface Employee {
   department: string;
   role: string;
   productivity7d: number;
-  avgFocusHDay: number;
+  avgBreakHDay: number;
   avgSessionMin: number;
   lastActive: string;
   status: 'online' | 'offline';
@@ -35,6 +36,7 @@ interface Employee {
 }
 
 export default function EmployeesPage() {
+  const { profile } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,12 +44,24 @@ export default function EmployeesPage() {
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [departmentFilter, setDepartmentFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
-  const filteredEmployees = employees.filter(emp =>
-    emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.department.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredEmployees = employees.filter(emp => {
+    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         emp.department.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDepartment = departmentFilter === 'all' || emp.department === departmentFilter;
+    const matchesRole = roleFilter === 'all' || emp.role === roleFilter;
+    const matchesStatus = statusFilter === 'all' || emp.status === statusFilter;
+
+    return matchesSearch && matchesDepartment && matchesRole && matchesStatus;
+  });
+
+  const uniqueDepartments = Array.from(new Set(employees.map(emp => emp.department)));
+  const uniqueRoles = Array.from(new Set(employees.map(emp => emp.role)));
 
   useEffect(() => {
     loadEmployees();
@@ -57,7 +71,14 @@ export default function EmployeesPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('/api/employees');
+
+      if (!profile?.organization_id) {
+        setError('No organization found');
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch(`/api/employees?organizationId=${profile.organization_id}`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch employees');
@@ -78,16 +99,54 @@ export default function EmployeesPage() {
   const formatHours = (value: number) => `${value.toFixed(1)}h`;
   const formatMinutes = (value: number) => `${value}min`;
 
+  const handleExportCSV = () => {
+    // Create CSV content
+    const headers = ['Name', 'Email', 'Department', 'Role', 'Productivity %', 'Avg Break (h)', 'Avg Session (min)', 'Last Active', 'Status'];
+    const csvRows = [
+      headers.join(','),
+      ...filteredEmployees.map(emp => [
+        `"${emp.name}"`,
+        `"${emp.email}"`,
+        `"${emp.department}"`,
+        `"${emp.role}"`,
+        emp.productivity7d.toFixed(1),
+        emp.avgBreakHDay.toFixed(1),
+        emp.avgSessionMin,
+        `"${emp.lastActive}"`,
+        emp.status
+      ].join(','))
+    ];
+
+    // Create blob and download
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `employees_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
   const handleAddEmployee = async (formData: EmployeeFormData) => {
     setIsCreating(true);
 
     try {
+      if (!profile?.organization_id) {
+        throw new Error('No organization found');
+      }
+
       const response = await fetch('/api/employees', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          organizationId: profile.organization_id
+        }),
       });
 
       if (!response.ok) {
@@ -141,15 +200,85 @@ export default function EmployeesPage() {
                   className="w-full"
                 />
               </div>
-              <Button variant="outline">
-                Filters
+              <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
+                Filters {showFilters ? '▲' : '▼'}
               </Button>
-              <Button variant="outline">
+              <Button variant="outline" onClick={handleExportCSV}>
                 Export CSV
               </Button>
             </div>
           </CardContent>
         </Card>
+
+        {/* Advanced Filters */}
+        {showFilters && (
+          <Card>
+            <CardContent className="py-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-ink-hi mb-2">
+                    Department
+                  </label>
+                  <select
+                    value={departmentFilter}
+                    onChange={(e) => setDepartmentFilter(e.target.value)}
+                    className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="all">All Departments</option>
+                    {uniqueDepartments.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink-hi mb-2">
+                    Role
+                  </label>
+                  <select
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                    className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="all">All Roles</option>
+                    {uniqueRoles.map(role => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink-hi mb-2">
+                    Status
+                  </label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="online">Online</option>
+                    <option value="offline">Offline</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between">
+                <Badge variant="info">
+                  Showing {filteredEmployees.length} of {employees.length} employees
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDepartmentFilter('all');
+                    setRoleFilter('all');
+                    setStatusFilter('all');
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Employees Table */}
         <Card>
@@ -160,7 +289,7 @@ export default function EmployeesPage() {
                 <TableHead>Department</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead sortable>Productivity %</TableHead>
-                <TableHead sortable>Avg Focus</TableHead>
+                <TableHead sortable>Avg Break</TableHead>
                 <TableHead sortable>Avg Session</TableHead>
                 <TableHead sortable>Last Active</TableHead>
                 <TableHead>Actions</TableHead>
@@ -254,7 +383,7 @@ export default function EmployeesPage() {
                   </TableCell>
                   <TableCell>
                     <span className="cell-num font-mono text-ink-mid">
-                      {formatHours(employee.avgFocusHDay)}
+                      {formatHours(employee.avgBreakHDay)}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -330,9 +459,9 @@ export default function EmployeesPage() {
                         </div>
                       </div>
                       <div className="bg-raised p-3 rounded-lg">
-                        <div className="text-xs text-ink-muted">Focus Time</div>
+                        <div className="text-xs text-ink-muted">Break Time</div>
                         <div className="text-lg font-semibold text-ink-hi font-mono">
-                          {formatHours(employee.avgFocusHDay)}
+                          {formatHours(employee.avgBreakHDay)}
                         </div>
                       </div>
                     </div>

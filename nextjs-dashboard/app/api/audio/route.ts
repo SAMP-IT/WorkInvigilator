@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const employeeId = searchParams.get('employeeId')
+    const organizationId = searchParams.get('organizationId')
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
+    const startDate = searchParams.get('startDate')
+    const endDate = searchParams.get('endDate')
 
     if (!employeeId) {
       return NextResponse.json(
@@ -15,83 +18,54 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get recordings from the recordings table (complete recordings)
-    const { data: recordings, error: recordingsError } = await supabase
-      .from('recordings')
-      .select(`
-        id,
-        user_id,
-        filename,
-        duration,
-        file_url,
-        created_at,
-        profiles!recordings_user_id_fkey (
-          name,
-          email
-        )
-      `)
-      .eq('user_id', employeeId)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'Organization ID is required' },
+        { status: 400 }
+      )
+    }
 
-    // Get recording chunks (chunked recordings)
-    const { data: chunks, error: chunksError } = await supabase
+    // Get recording chunks filtered by organization and date range
+    let chunksQuery = supabaseAdmin
       .from('recording_chunks')
-      .select(`
-        id,
-        user_id,
-        session_start_time,
-        chunk_number,
-        filename,
-        file_url,
-        duration_seconds,
-        chunk_start_time,
-        created_at,
-        profiles!recording_chunks_user_id_fkey (
-          name,
-          email
-        )
-      `)
+      .select('*')
       .eq('user_id', employeeId)
+      .eq('organization_id', organizationId)
+
+    // Apply date filters if provided
+    if (startDate) {
+      chunksQuery = chunksQuery.gte('created_at', new Date(startDate).toISOString())
+    }
+    if (endDate) {
+      // Add 1 day to endDate to include the entire end date
+      const endDateTime = new Date(endDate)
+      endDateTime.setDate(endDateTime.getDate() + 1)
+      chunksQuery = chunksQuery.lt('created_at', endDateTime.toISOString())
+    }
+
+    chunksQuery = chunksQuery
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
-    if (recordingsError && chunksError) {
-      console.error('Error fetching audio data:', { recordingsError, chunksError })
+    const { data: chunks, error: chunksError } = await chunksQuery
+
+    // Get employee profile separately
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('name, email')
+      .eq('id', employeeId)
+      .single()
+
+    if (chunksError) {
+      console.error('Error fetching audio chunks:', chunksError)
       return NextResponse.json(
         { error: 'Failed to fetch audio recordings' },
         { status: 500 }
       )
     }
 
-    // Combine and format recordings and chunks
+    // Format audio recordings
     const allAudioRecordings = []
-
-    // Process complete recordings
-    if (recordings && recordings.length > 0) {
-      recordings.forEach(recording => {
-        allAudioRecordings.push({
-          id: recording.id,
-          type: 'complete',
-          user_id: recording.user_id,
-          employeeName: recording.profiles?.name || recording.profiles?.email || 'Unknown',
-          filename: recording.filename,
-          duration: recording.duration, // Duration in milliseconds
-          durationFormatted: formatDuration(recording.duration),
-          file_url: recording.file_url,
-          created_at: recording.created_at,
-          timestamp: new Date(recording.created_at).toLocaleString('en-GB', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
-          file_size: null, // Not stored in current schema
-          session_info: null
-        })
-      })
-    }
 
     // Process recording chunks - group by session
     if (chunks && chunks.length > 0) {
@@ -113,7 +87,7 @@ export async function GET(request: NextRequest) {
           id: `session-${sessionStart}`,
           type: 'chunked',
           user_id: firstChunk.user_id,
-          employeeName: firstChunk.profiles?.name || firstChunk.profiles?.email || 'Unknown',
+          employeeName: profile?.name || profile?.email || 'Unknown',
           filename: `Session ${new Date(sessionStart).toLocaleDateString()} (${sessionChunks.length} chunks)`,
           duration: totalDuration,
           durationFormatted: formatDuration(totalDuration),
@@ -147,18 +121,13 @@ export async function GET(request: NextRequest) {
     allAudioRecordings.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     // Get total count for pagination
-    const { count: totalRecordings } = await supabase
-      .from('recordings')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', employeeId)
-
-    const { count: totalChunks } = await supabase
+    const { count: totalChunks } = await supabaseAdmin
       .from('recording_chunks')
       .select('session_start_time', { count: 'exact', head: true })
       .eq('user_id', employeeId)
 
-    // Estimate total count (this is approximate for chunked sessions)
-    const totalCount = (totalRecordings || 0) + Math.ceil((totalChunks || 0) / 4) // Assume avg 4 chunks per session
+    // Estimate total count (number of unique sessions)
+    const totalCount = allAudioRecordings.length
 
     return NextResponse.json({
       recordings: allAudioRecordings,
@@ -202,7 +171,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'getEmployees') {
       // Get all employees that have audio recordings
-      const { data: employees } = await supabase
+      const { data: employees } = await supabaseAdmin
         .from('profiles')
         .select(`
           id,
@@ -215,21 +184,16 @@ export async function POST(request: NextRequest) {
       // Get recording counts for each employee
       const employeesWithCounts = await Promise.all(
         (employees || []).map(async (employee) => {
-          const { count: recordingCount } = await supabase
-            .from('recordings')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', employee.id)
-
-          const { count: chunkCount } = await supabase
+          const { count: chunkCount } = await supabaseAdmin
             .from('recording_chunks')
             .select('*', { count: 'exact', head: true })
             .eq('user_id', employee.id)
 
           return {
             ...employee,
-            recordingCount: recordingCount || 0,
+            recordingCount: 0,
             chunkCount: chunkCount || 0,
-            totalAudioFiles: (recordingCount || 0) + (chunkCount || 0)
+            totalAudioFiles: chunkCount || 0
           }
         })
       )

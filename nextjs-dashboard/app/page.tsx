@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { KpiTile } from "@/components/ui/KpiTile";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { KpiIcon } from "@/components/ui/KpiIcon";
 import { Modal } from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
 import type { Profile } from "@/lib/supabase";
 
 interface EmployeeWithMetrics {
@@ -18,7 +19,7 @@ interface EmployeeWithMetrics {
   department: string;
   role: string;
   productivity7d: number;
-  avgFocusHDay: number;
+  avgBreakHDay: number;
   avgSessionMin: number;
   lastActive: string;
   status: 'online' | 'offline';
@@ -38,6 +39,8 @@ interface Screenshot {
 
 export default function HomePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { profile } = useAuth();
   const [employees, setEmployees] = useState<EmployeeWithMetrics[]>([]);
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,19 +50,37 @@ export default function HomePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (profile?.organization_id) {
+      loadData();
+    }
+  }, [profile, searchParams]);
 
   async function loadData() {
+    setLoading(true);
     try {
-      // Load dashboard metrics (optimized for dashboard use)
-      const dashboardResponse = await fetch('/api/dashboard?period=today');
+      console.log('🔄 Starting to load dashboard data...');
+
+      if (!profile?.organization_id) {
+        console.error('No organization ID found');
+        setLoading(false);
+        return;
+      }
+
+      // Get period from URL params or default to today
+      const period = searchParams?.get('period') || 'today';
+
+      // Load dashboard metrics filtered by organization
+      const dashboardResponse = await fetch(`/api/dashboard?period=${period}&organizationId=${profile.organization_id}`);
+      console.log('📡 Dashboard API response status:', dashboardResponse.status);
+
       if (dashboardResponse.ok) {
         const dashboardData = await dashboardResponse.json();
-        console.log('Dashboard data loaded:', dashboardData); // Debug log
+        console.log('✅ Dashboard data loaded:', dashboardData);
 
         // Set screenshots from dashboard data
-        setScreenshots(dashboardData.recentScreenshots || []);
+        const screenshots = dashboardData.recentScreenshots || [];
+        console.log('📸 Setting screenshots:', screenshots.length);
+        setScreenshots(screenshots);
 
         // Create employees array from dashboard data for compatibility
         const employeesFromDashboard = dashboardData.topPerformers?.map((performer: any) => ({
@@ -67,23 +88,25 @@ export default function HomePage() {
           name: performer.name,
           email: performer.email,
           productivity7d: performer.productivity,
-          avgFocusHDay: performer.focusHours,
+          avgBreakHDay: performer.breakHours || 0,
           avgSessionMin: Math.round(performer.workHours * 60),
           status: 'offline' as const // Will be updated by separate call if needed
         })) || [];
 
+        console.log('👥 Setting employees:', employeesFromDashboard.length);
         setEmployees(employeesFromDashboard);
       } else {
-        console.error('Failed to load dashboard data:', dashboardResponse.status);
+        console.error('❌ Failed to load dashboard data:', dashboardResponse.status);
 
         // Fallback to individual API calls
         await loadDataFallback();
       }
     } catch (error) {
-      console.error("Error loading dashboard data:", error);
+      console.error("❌ Error loading dashboard data:", error);
       // Fallback to individual API calls
       await loadDataFallback();
     } finally {
+      console.log('✅ Loading complete, setting loading to false');
       setLoading(false);
     }
   }
@@ -168,12 +191,12 @@ export default function HomePage() {
             onClick={() => router.push("/reports")}
           />
           <KpiTile
-            icon={<KpiIcon src="/focus.png" alt="Focus Time" />}
-            label="Avg Focus Time"
+            icon={<KpiIcon src="/focus.png" alt="Break Time" />}
+            label="Avg Break Time"
             value={employees.length > 0 ?
-              `${(employees.reduce((sum, emp) => sum + emp.avgFocusHDay, 0) / employees.length).toFixed(1)}h` :
+              `${(employees.reduce((sum, emp) => sum + emp.avgBreakHDay, 0) / employees.length).toFixed(1)}h` :
               "0h"}
-            delta={{ value: 1.5, direction: "down" }}
+            delta={{ value: 1.5, direction: "up" }}
             onClick={() => router.push("/reports")}
           />
           <KpiTile

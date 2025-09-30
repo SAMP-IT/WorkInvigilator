@@ -77,7 +77,7 @@ class AuthManager {
     try {
       console.log('🔍 Loading user profile for:', this.mainApp.currentUser.id);
 
-      const profileResponse = await fetch(`${this.supabaseUrl}/rest/v1/profiles?id=eq.${this.mainApp.currentUser.id}&select=role`, {
+      const profileResponse = await fetch(`${this.supabaseUrl}/rest/v1/profiles?id=eq.${this.mainApp.currentUser.id}&select=role,organization_id`, {
         method: 'GET',
         headers: {
           'apikey': this.supabaseKey,
@@ -91,7 +91,8 @@ class AuthManager {
         const profile = profiles && profiles.length > 0 ? profiles[0] : null;
 
         this.mainApp.userRole = profile?.role || 'user';
-        console.log('✅ Profile loaded, role:', this.mainApp.userRole);
+        this.mainApp.organizationId = profile?.organization_id || null;
+        console.log('✅ Profile loaded, role:', this.mainApp.userRole, 'organization:', this.mainApp.organizationId);
 
         // Check if this is the first user and no admin exists yet
         if (this.mainApp.userRole === 'user') {
@@ -180,6 +181,7 @@ class AuthManager {
       }
 
       if (authData.user) {
+        // Check if user exists in profiles table
         const profileResponse = await fetch(`${this.supabaseUrl}/rest/v1/profiles?id=eq.${authData.user.id}&select=*`, {
           method: 'GET',
           headers: {
@@ -192,12 +194,27 @@ class AuthManager {
         const profiles = await profileResponse.json();
         const profile = profiles && profiles.length > 0 ? profiles[0] : null;
 
+        // SECURITY CHECK: Only allow login if profile exists
+        if (!profile) {
+          console.warn('⚠️ Login blocked: No employee profile found for', authData.user.email);
+          // Sign out the user from Supabase Auth
+          await fetch(`${this.supabaseUrl}/auth/v1/logout`, {
+            method: 'POST',
+            headers: {
+              'apikey': this.supabaseKey,
+              'Authorization': `Bearer ${authData.access_token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          throw new Error('Access denied. You are not registered as an employee. Please contact your administrator.');
+        }
+
         this.mainApp.currentUser = authData.user;
-        this.mainApp.userRole = profile ? profile.role : 'user';
+        this.mainApp.userRole = profile.role;
 
         console.log('✅ Login successful!');
         console.log('👤 User:', authData.user.email);
-        console.log('👑 Role from profile:', profile?.role);
+        console.log('👑 Role from profile:', profile.role);
         console.log('🎯 Final userRole:', this.mainApp.userRole);
 
         localStorage.setItem('currentUser', JSON.stringify(authData.user));

@@ -5,6 +5,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/lib/auth-context';
 
 interface Screenshot {
   id: string;
@@ -24,12 +25,15 @@ interface Employee {
 }
 
 export default function ScreenshotsPage() {
+  const { profile } = useAuth();
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   const displayedScreenshots = selectedEmployee === 'all'
     ? screenshots
@@ -41,25 +45,34 @@ export default function ScreenshotsPage() {
 
   useEffect(() => {
     loadData();
-  }, [selectedEmployee]);
+  }, [selectedEmployee, startDate, endDate]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
 
+      if (!profile?.organization_id) {
+        setError('No organization found');
+        setLoading(false);
+        return;
+      }
+
       // Load employees first
-      const employeesResponse = await fetch('/api/employees');
+      const employeesResponse = await fetch(`/api/employees?organizationId=${profile.organization_id}`);
       if (!employeesResponse.ok) {
         throw new Error('Failed to fetch employees');
       }
       const employeesData = await employeesResponse.json();
       setEmployees(employeesData.employees || []);
 
-      // Load screenshots
-      const screenshotsUrl = selectedEmployee === 'all'
-        ? '/api/screenshots'
-        : `/api/screenshots?employeeId=${selectedEmployee}`;
+      // Load screenshots with organization filter and date range
+      let screenshotsUrl = selectedEmployee === 'all'
+        ? `/api/screenshots?organizationId=${profile.organization_id}`
+        : `/api/screenshots?employeeId=${selectedEmployee}&organizationId=${profile.organization_id}`;
+
+      if (startDate) screenshotsUrl += `&startDate=${startDate}`;
+      if (endDate) screenshotsUrl += `&endDate=${endDate}`;
 
       const screenshotsResponse = await fetch(screenshotsUrl);
       if (!screenshotsResponse.ok) {
@@ -95,6 +108,30 @@ export default function ScreenshotsPage() {
     }
   };
 
+  const handleDownload = (screenshotId: string) => {
+    const screenshot = displayedScreenshots.find(s => s.id === screenshotId);
+    if (!screenshot?.url) return;
+
+    // Create a temporary link and trigger download
+    const a = document.createElement('a');
+    a.href = screenshot.url;
+    a.download = screenshot.filename || `screenshot_${screenshot.timestamp}.png`;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleDownloadAll = () => {
+    displayedScreenshots.forEach((screenshot, index) => {
+      if (screenshot.url) {
+        setTimeout(() => {
+          handleDownload(screenshot.id);
+        }, index * 500); // Stagger downloads by 500ms
+      }
+    });
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -108,24 +145,27 @@ export default function ScreenshotsPage() {
             <Badge variant="info">
               {loading ? '...' : screenshots.length} Total
             </Badge>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleDownloadAll} disabled={displayedScreenshots.length === 0}>
               Download All
             </Button>
           </div>
         </div>
 
-        {/* Employee Filter */}
+        {/* Filters */}
         <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <label className="text-sm font-medium text-ink-hi">
-                  Filter by Employee:
+          <CardHeader>
+            <CardTitle>Filters</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-ink-hi mb-2">
+                  Employee
                 </label>
                 <select
                   value={selectedEmployee}
                   onChange={(e) => setSelectedEmployee(e.target.value)}
-                  className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary min-w-48"
+                  className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="all">All Employees</option>
                   {employees.map(employee => (
@@ -134,16 +174,56 @@ export default function ScreenshotsPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-ink-hi mb-2">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={loading}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-ink-hi mb-2">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={loading}
+                />
+              </div>
+            </div>
+            <div className="mt-3 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
                 <Badge variant="outline">
                   {displayedScreenshots.length} screenshots
                 </Badge>
+                {(startDate || endDate) && (
+                  <p className="text-sm text-ink-muted">
+                    {startDate && endDate ? `${startDate} to ${endDate}` :
+                     startDate ? `From ${startDate}` :
+                     `Until ${endDate}`}
+                  </p>
+                )}
               </div>
-              {selectedEmployee !== 'all' && (
+              {(selectedEmployee !== 'all' || startDate || endDate) && (
                 <Button
                   variant="outline"
-                  onClick={() => setSelectedEmployee('all')}
+                  size="sm"
+                  onClick={() => {
+                    setSelectedEmployee('all');
+                    setStartDate('');
+                    setEndDate('');
+                  }}
                 >
-                  Clear Filter
+                  Clear All Filters
                 </Button>
               )}
             </div>
@@ -193,12 +273,31 @@ export default function ScreenshotsPage() {
                   className="group relative bg-raised rounded-lg border border-line overflow-hidden hover:shadow-hover transition-all cursor-pointer"
                   onClick={() => setSelectedScreenshot(screenshot.id)}
                 >
-                  {/* Screenshot Placeholder */}
-                  <div className="aspect-video bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="text-2xl mb-1">📸</div>
-                      <div className="text-xs text-ink-muted">{screenshot.application}</div>
-                    </div>
+                  {/* Screenshot Image */}
+                  <div className="aspect-video bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center overflow-hidden">
+                    {screenshot.url ? (
+                      <img
+                        src={screenshot.url}
+                        alt={`Screenshot by ${screenshot.employeeName}`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Fallback to placeholder if image fails to load
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          target.parentElement!.innerHTML = `
+                            <div class="text-center">
+                              <div class="text-2xl mb-1">📸</div>
+                              <div class="text-xs text-ink-muted">${screenshot.application || 'Screenshot'}</div>
+                            </div>
+                          `;
+                        }}
+                      />
+                    ) : (
+                      <div className="text-center">
+                        <div className="text-2xl mb-1">📸</div>
+                        <div className="text-xs text-ink-muted">{screenshot.application || 'No preview'}</div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Screenshot Info */}
@@ -220,10 +319,24 @@ export default function ScreenshotsPage() {
                   {/* Hover Actions */}
                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <div className="flex space-x-2">
-                      <Button size="sm" variant="secondary">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedScreenshot(screenshot.id);
+                        }}
+                      >
                         View
                       </Button>
-                      <Button size="sm" variant="outline">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownload(screenshot.id);
+                        }}
+                      >
                         Download
                       </Button>
                     </div>
@@ -296,17 +409,28 @@ export default function ScreenshotsPage() {
                   </Button>
                 </div>
                 <div className="p-4">
-                  <div className="aspect-video bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg flex items-center justify-center mb-4">
-                    <div className="text-center">
-                      <div className="text-6xl mb-4">📸</div>
-                      <div className="text-ink-muted">Screenshot Preview</div>
-                      <div className="text-sm text-ink-muted mt-2">
-                        {displayedScreenshots.find(s => s.id === selectedScreenshot)?.timestamp}
-                      </div>
-                    </div>
+                  <div className="aspect-video bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg flex items-center justify-center mb-4 overflow-hidden">
+                    {(() => {
+                      const screenshot = displayedScreenshots.find(s => s.id === selectedScreenshot);
+                      return screenshot?.url ? (
+                        <img
+                          src={screenshot.url}
+                          alt="Screenshot preview"
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <div className="text-center">
+                          <div className="text-6xl mb-4">📸</div>
+                          <div className="text-ink-muted">Screenshot Preview</div>
+                          <div className="text-sm text-ink-muted mt-2">
+                            {screenshot?.timestamp}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="flex justify-center space-x-3">
-                    <Button>
+                    <Button onClick={() => selectedScreenshot && handleDownload(selectedScreenshot)}>
                       Download Original
                     </Button>
                     <Button variant="outline">

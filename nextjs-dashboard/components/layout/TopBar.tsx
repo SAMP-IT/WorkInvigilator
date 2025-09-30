@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -18,8 +19,12 @@ export function TopBar() {
   const [dateRange, setDateRange] = useState('Last 7 days');
   const [user, setUser] = useState<User | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [activeSessions, setActiveSessions] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
+  const { profile } = useAuth();
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -32,6 +37,31 @@ export function TopBar() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Load active sessions count
+  useEffect(() => {
+    const loadActiveSessions = async () => {
+      if (!profile?.organization_id) return;
+
+      try {
+        const { count } = await supabase
+          .from('recording_sessions')
+          .select('*', { count: 'exact', head: true })
+          .eq('organization_id', profile.organization_id)
+          .is('session_end_time', null);
+
+        setActiveSessions(count || 0);
+      } catch (error) {
+        console.error('Error loading active sessions:', error);
+      }
+    };
+
+    loadActiveSessions();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(loadActiveSessions, 30000);
+    return () => clearInterval(interval);
+  }, [profile]);
 
   useEffect(() => {
     // Get current user
@@ -89,6 +119,27 @@ export function TopBar() {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      // Redirect to employees page with search query
+      router.push(`/employees?search=${encodeURIComponent(searchQuery)}`);
+    }
+  };
+
+  const handleDateRangeChange = (newRange: string) => {
+    setDateRange(newRange);
+
+    // If on dashboard, reload with new period
+    if (pathname === '/') {
+      let period = 'today';
+      if (newRange === 'Last 7 days') period = 'week';
+      else if (newRange === 'Last 14 days' || newRange === 'Last 30 days') period = 'month';
+
+      // Trigger page reload with new period (you can make this more elegant with state management)
+      window.location.href = `/?period=${period}`;
+    }
+  };
+
   return (
     <div className="flex h-16 items-center justify-between px-6 bg-surface border-b border-line">
       {/* Left section */}
@@ -103,16 +154,23 @@ export function TopBar() {
           <Input
             placeholder="Search employees, sessions..."
             className="w-80"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearch}
           />
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-            <span className="text-ink-muted text-xs">⌘K</span>
+            <span className="text-ink-muted text-xs">⏎</span>
           </div>
         </div>
 
         {/* Live status */}
         <div className="flex items-center space-x-2">
-          <div className="w-2 h-2 bg-success rounded-full animate-pulse"></div>
-          <span className="text-sm text-ink-mid">12 active sessions</span>
+          {activeSessions > 0 && (
+            <div className="w-2 h-2 bg-success rounded-full animate-pulse"></div>
+          )}
+          <span className="text-sm text-ink-mid">
+            {activeSessions} active session{activeSessions !== 1 ? 's' : ''}
+          </span>
         </div>
       </div>
 
@@ -122,7 +180,7 @@ export function TopBar() {
         <div className="flex items-center space-x-2">
           <select
             value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
+            onChange={(e) => handleDateRangeChange(e.target.value)}
             className="bg-surface border border-line rounded-lg px-3 py-1.5 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <option>Today</option>

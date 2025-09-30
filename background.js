@@ -159,6 +159,11 @@ async function handleMessage(request, sender, sendResponse) {
         sendResponse(breakResult);
         break;
 
+      case 'captureScreenshot':
+        const screenshotResult = await handleCaptureScreenshot();
+        sendResponse(screenshotResult);
+        break;
+
       default:
         sendResponse({ success: false, error: 'Unknown action' });
     }
@@ -206,6 +211,21 @@ async function handleLogin(data) {
 
     const profiles = await profileResponse.json();
     const profile = profiles && profiles.length > 0 ? profiles[0] : null;
+
+    // SECURITY CHECK: Block login if no employee profile exists
+    if (!profile) {
+      console.warn('⚠️ Login blocked: No employee profile found for', authData.user.email);
+      // Sign out the user from Supabase Auth
+      await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${authData.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      throw new Error('Access denied. You are not registered as an employee. Please contact your administrator.');
+    }
 
     return {
       success: true,
@@ -315,6 +335,31 @@ async function handleSaveBreak(data) {
     return { success: true };
 
   } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function handleCaptureScreenshot() {
+  try {
+    // Get the current active tab in the current window
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+
+    if (!tab) {
+      console.warn('No active tab found for screenshot');
+      return { success: false, error: 'No active tab found' };
+    }
+
+    // Capture the visible tab using host_permissions (<all_urls>)
+    // This works because we have host_permissions, not activeTab
+    const dataUrl = await chrome.tabs.captureVisibleTab(null, {
+      format: 'png',
+      quality: 80
+    });
+
+    return { success: true, dataUrl: dataUrl };
+
+  } catch (error) {
+    console.error('Screenshot capture error:', error);
     return { success: false, error: error.message };
   }
 }

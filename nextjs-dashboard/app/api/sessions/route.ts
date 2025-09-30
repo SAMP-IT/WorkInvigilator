@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 // Helper function to get applications for a session
 function getSessionApplications(session: any): string[] {
@@ -32,36 +32,50 @@ function getSessionApplications(session: any): string[] {
 
 export async function GET(request: NextRequest) {
   try {
-    // Get all recording sessions with user info and metrics
-    const { data: sessions } = await supabase
+    const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organizationId')
+
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'Organization ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Get all recording sessions for this organization
+    const { data: sessions } = await supabaseAdmin
       .from('recording_sessions')
-      .select(`
-        id,
-        user_id,
-        session_start_time,
-        session_end_time,
-        total_duration_seconds,
-        total_chunks,
-        created_at,
-        profiles!recording_sessions_user_id_fkey (
-          name,
-          email
-        )
-      `)
+      .select('*')
+      .eq('organization_id', organizationId)
       .order('session_start_time', { ascending: false })
+
+    // Get unique user IDs to fetch profiles
+    const userIds = [...new Set((sessions || []).map(s => s.user_id))]
+
+    // Fetch profiles for all users
+    const { data: profiles } = await supabaseAdmin
+      .from('profiles')
+      .select('id, name, email')
+      .in('id', userIds)
+
+    // Create a map of user ID to profile
+    const profileMap = (profiles || []).reduce((acc, profile) => {
+      acc[profile.id] = profile
+      return acc
+    }, {} as Record<string, any>)
 
     // Get productivity metrics and screenshots for each session
     const sessionsWithMetrics = await Promise.all(
       (sessions || []).map(async (session) => {
         // Get productivity metrics for this session
-        const { data: metrics } = await supabase
+        const { data: metrics } = await supabaseAdmin
           .from('productivity_metrics')
           .select('focus_time_seconds, productivity_percentage, screenshots_count')
           .eq('session_id', session.id)
           .single()
 
         // Get screenshots count for this session
-        const { count: screenshotsCount } = await supabase
+        const { count: screenshotsCount } = await supabaseAdmin
           .from('screenshots')
           .select('*', { count: 'exact', head: true })
           .eq('session_id', session.id)
@@ -101,8 +115,9 @@ export async function GET(request: NextRequest) {
             })
           : 'Active'
 
-        // Generate employee avatar
-        const employeeName = session.profiles?.name || 'Unknown Employee'
+        // Get employee info from profile map
+        const profile = profileMap[session.user_id]
+        const employeeName = profile?.name || profile?.email || 'Unknown Employee'
         const employeeAvatar = employeeName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 
         return {

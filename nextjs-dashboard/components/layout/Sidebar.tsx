@@ -33,6 +33,11 @@ const navigationItems = [
     icon: "/audio.png",
   },
   {
+    name: "Breaks",
+    href: "/breaks",
+    icon: "/focus.png",
+  },
+  {
     name: "Reports",
     href: "/reports",
     icon: "/report.png",

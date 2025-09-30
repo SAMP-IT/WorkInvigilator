@@ -1,14 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export async function GET(request: NextRequest) {
   try {
     console.log('API: Starting employee fetch...') // Debug log
 
-    // Get all employee profiles (both users and admins can see all employees)
-    const { data: employees, error: employeesError } = await supabase
+    // Get organization_id from query params (passed from frontend)
+    const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organizationId')
+
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'Organization ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Get employees filtered by organization
+    const { data: employees, error: employeesError } = await supabaseAdmin
       .from('profiles')
       .select('*')
+      .eq('organization_id', organizationId)
       .in('role', ['user', 'admin']) // Include both users and admins
       .order('created_at', { ascending: false })
 
@@ -39,7 +51,7 @@ export async function GET(request: NextRequest) {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
         // Get employee sessions from last 7 days
-        const { data: sessions } = await supabase
+        const { data: sessions } = await supabaseAdmin
           .from('recording_sessions')
           .select('*')
           .eq('user_id', employee.id)
@@ -47,14 +59,14 @@ export async function GET(request: NextRequest) {
           .order('session_start_time', { ascending: false })
 
         // Get productivity metrics from last 7 days
-        const { data: metrics } = await supabase
+        const { data: metrics } = await supabaseAdmin
           .from('productivity_metrics')
           .select('*')
           .eq('user_id', employee.id)
           .gte('date', sevenDaysAgo.toISOString().split('T')[0])
 
         // Check if user has active session
-        const { data: activeSessions } = await supabase
+        const { data: activeSessions } = await supabaseAdmin
           .from('recording_sessions')
           .select('*')
           .eq('user_id', employee.id)
@@ -132,7 +144,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { name, email, password, department, role, shiftStartTime, shiftEndTime } = await request.json()
+    const { name, email, password, department, role, shiftStartTime, shiftEndTime, organizationId } = await request.json()
 
     if (!name || !email || !password) {
       return NextResponse.json(
@@ -141,10 +153,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'Organization ID is required' },
+        { status: 400 }
+      )
+    }
+
     console.log('Creating user account...', { email, name })
 
     // Check if user already exists in profiles
-    const { data: existingProfile } = await supabase
+    const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
       .select('email')
       .eq('email', email)
@@ -161,7 +180,7 @@ export async function POST(request: NextRequest) {
     const userId = crypto.randomUUID()
 
     // Try to create user with regular signup first
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+    const { data: signUpData, error: signUpError } = await supabaseAdmin.auth.signUp({
       email,
       password,
       options: {
@@ -189,8 +208,8 @@ export async function POST(request: NextRequest) {
 
     console.log('User signed up:', signUpData.user.id)
 
-    // Now create/update the profile
-    const { data: profile, error: profileError } = await supabase
+    // Now create/update the profile with organization
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({
         id: signUpData.user.id,
@@ -198,6 +217,7 @@ export async function POST(request: NextRequest) {
         name,
         department: department || 'General',
         role: (role || 'user').toLowerCase(),
+        organization_id: organizationId,
         shift_start_time: shiftStartTime || null,
         shift_end_time: shiftEndTime || null,
         created_at: new Date().toISOString(),

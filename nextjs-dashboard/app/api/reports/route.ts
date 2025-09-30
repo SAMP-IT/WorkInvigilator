@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const employeeId = searchParams.get('employeeId')
+    const organizationId = searchParams.get('organizationId')
     const period = searchParams.get('period') as 'daily' | 'weekly' | 'monthly' || 'daily'
 
     if (!employeeId) {
@@ -14,8 +15,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'Organization ID is required' },
+        { status: 400 }
+      )
+    }
+
     // Get employee info
-    const { data: employee } = await supabase
+    const { data: employee } = await supabaseAdmin
       .from('profiles')
       .select('name, email, department')
       .eq('id', employeeId)
@@ -50,28 +58,31 @@ export async function GET(request: NextRequest) {
         startDate.setHours(0, 0, 0, 0)
     }
 
-    // Get sessions for the period
-    const { data: sessions } = await supabase
+    // Get sessions for the period filtered by organization
+    const { data: sessions } = await supabaseAdmin
       .from('recording_sessions')
       .select('*')
       .eq('user_id', employeeId)
+      .eq('organization_id', organizationId)
       .gte('session_start_time', startDate.toISOString())
       .lte('session_start_time', endDate.toISOString())
       .order('session_start_time', { ascending: false })
 
-    // Get productivity metrics for the period
-    const { data: metrics } = await supabase
+    // Get productivity metrics for the period filtered by organization
+    const { data: metrics } = await supabaseAdmin
       .from('productivity_metrics')
       .select('*')
       .eq('user_id', employeeId)
+      .eq('organization_id', organizationId)
       .gte('date', startDate.toISOString().split('T')[0])
       .lte('date', endDate.toISOString().split('T')[0])
 
-    // Get screenshots count for the period
-    const { count: screenshotsCount } = await supabase
+    // Get screenshots count for the period filtered by organization
+    const { count: screenshotsCount } = await supabaseAdmin
       .from('screenshots')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', employeeId)
+      .eq('organization_id', organizationId)
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString())
 
@@ -96,11 +107,12 @@ export async function GET(request: NextRequest) {
       ? `This Week - ${startDate.toLocaleDateString('en-GB')} to ${endDate.toLocaleDateString('en-GB')}`
       : `This Month - ${startDate.toLocaleDateString('en-GB')} to ${endDate.toLocaleDateString('en-GB')}`
 
-    // Get break sessions for more accurate calculations
-    const { data: breakSessions } = await supabase
+    // Get break sessions for more accurate calculations filtered by organization
+    const { data: breakSessions } = await supabaseAdmin
       .from('break_sessions')
       .select('*')
       .eq('user_id', employeeId)
+      .eq('organization_id', organizationId)
       .gte('break_start_time', startDate.toISOString())
       .lte('break_start_time', endDate.toISOString())
 
@@ -197,7 +209,7 @@ export async function GET(request: NextRequest) {
       }))
     }
 
-    return NextResponse.json(reportData)
+    return NextResponse.json({ report: reportData })
 
   } catch (error) {
     console.error('Error generating report:', error)

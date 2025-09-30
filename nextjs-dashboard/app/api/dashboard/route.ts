@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period') || 'today' // today, week, month
+    const organizationId = searchParams.get('organizationId')
+
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'Organization ID is required' },
+        { status: 400 }
+      )
+    }
 
     // Get date range based on period
     let startDate: Date
@@ -28,58 +36,68 @@ export async function GET(request: NextRequest) {
         startDate.setHours(0, 0, 0, 0)
     }
 
-    // Get all active sessions (sessions without end time)
-    const { data: activeSessions } = await supabase
+    // Get all active sessions filtered by organization
+    const { data: activeSessions } = await supabaseAdmin
       .from('recording_sessions')
-      .select(`
-        id,
-        user_id,
-        session_start_time,
-        total_duration_seconds,
-        profiles!recording_sessions_user_id_fkey (
-          name,
-          email
-        )
-      `)
+      .select('id, user_id, session_start_time, total_duration_seconds')
+      .eq('organization_id', organizationId)
       .is('session_end_time', null)
 
-    // Get all employees
-    const { data: allEmployees } = await supabase
+    // Get profiles for active sessions
+    const activeUserIds = [...new Set((activeSessions || []).map(s => s.user_id))]
+    const { data: activeProfiles } = await supabaseAdmin
+      .from('profiles')
+      .select('id, name, email')
+      .in('id', activeUserIds)
+
+    const activeProfileMap = (activeProfiles || []).reduce((acc, p) => {
+      acc[p.id] = p
+      return acc
+    }, {} as Record<string, any>)
+
+    // Get all employees from this organization
+    const { data: allEmployees } = await supabaseAdmin
       .from('profiles')
       .select('id, name, email, department, role')
+      .eq('organization_id', organizationId)
 
-    // Get sessions for the period
-    const { data: periodSessions } = await supabase
+    // Get sessions for the period filtered by organization
+    const { data: periodSessions } = await supabaseAdmin
       .from('recording_sessions')
       .select('*')
+      .eq('organization_id', organizationId)
       .gte('session_start_time', startDate.toISOString())
       .lte('session_start_time', endDate.toISOString())
 
     // Get productivity metrics for the period
-    const { data: periodMetrics } = await supabase
+    const { data: periodMetrics } = await supabaseAdmin
       .from('productivity_metrics')
       .select('*')
+      .eq('organization_id', organizationId)
       .gte('date', startDate.toISOString().split('T')[0])
       .lte('date', endDate.toISOString().split('T')[0])
 
-    // Get screenshots for the period
-    const { data: periodScreenshots } = await supabase
+    // Get screenshots for the period filtered by organization
+    const { data: periodScreenshots } = await supabaseAdmin
       .from('screenshots')
-      .select(`
-        id,
-        user_id,
-        filename,
-        file_url,
-        created_at,
-        profiles!screenshots_user_id_fkey (
-          name,
-          email
-        )
-      `)
+      .select('id, user_id, filename, file_url, created_at')
+      .eq('organization_id', organizationId)
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString())
       .order('created_at', { ascending: false })
-      .limit(8) // Get recent screenshots for dashboard
+      .limit(8)
+
+    // Get profiles for screenshots
+    const screenshotUserIds = [...new Set((periodScreenshots || []).map(s => s.user_id))]
+    const { data: screenshotProfiles } = await supabaseAdmin
+      .from('profiles')
+      .select('id, name, email')
+      .in('id', screenshotUserIds)
+
+    const screenshotProfileMap = (screenshotProfiles || []).reduce((acc, p) => {
+      acc[p.id] = p
+      return acc
+    }, {} as Record<string, any>)
 
     // Calculate key metrics
     const totalEmployees = allEmployees?.length || 0
@@ -109,10 +127,11 @@ export async function GET(request: NextRequest) {
       const durationHours = Math.floor(durationMs / (1000 * 60 * 60))
       const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60))
 
+      const profile = activeProfileMap[session.user_id]
       return {
         id: session.id,
         employeeId: session.user_id,
-        employeeName: session.profiles?.name || session.profiles?.email || 'Unknown',
+        employeeName: profile?.name || profile?.email || 'Unknown',
         startTime: startTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
         duration: durationHours > 0 ? `${durationHours}h ${durationMinutes}m` : `${durationMinutes}m`,
         status: 'active' as const
@@ -172,19 +191,22 @@ export async function GET(request: NextRequest) {
       .slice(0, 4)
 
     // Format recent screenshots for dashboard
-    const recentScreenshots = periodScreenshots?.map(screenshot => ({
-      id: screenshot.id,
-      employeeId: screenshot.user_id,
-      employeeName: screenshot.profiles?.name || screenshot.profiles?.email || 'Unknown',
-      timestamp: new Date(screenshot.created_at).toLocaleString('en-GB', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
-      url: screenshot.file_url,
-      filename: screenshot.filename
-    })) || []
+    const recentScreenshots = periodScreenshots?.map(screenshot => {
+      const profile = screenshotProfileMap[screenshot.user_id]
+      return {
+        id: screenshot.id,
+        employeeId: screenshot.user_id,
+        employeeName: profile?.name || profile?.email || 'Unknown',
+        timestamp: new Date(screenshot.created_at).toLocaleString('en-GB', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        url: screenshot.file_url,
+        filename: screenshot.filename
+      }
+    }) || []
 
     // Calculate period-specific insights
     const insights = {
@@ -250,12 +272,12 @@ export async function POST(request: NextRequest) {
 
       case 'getQuickStats':
         // Get minimal stats for frequent updates
-        const { data: activeCount } = await supabase
+        const { data: activeCount } = await supabaseAdmin
           .from('recording_sessions')
           .select('id', { count: 'exact', head: true })
           .is('session_end_time', null)
 
-        const { data: employeeCount } = await supabase
+        const { data: employeeCount } = await supabaseAdmin
           .from('profiles')
           .select('id', { count: 'exact', head: true })
 

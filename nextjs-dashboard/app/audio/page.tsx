@@ -5,18 +5,24 @@ import { useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 import type { Profile, Recording } from '@/lib/supabase';
 
 export default function AudioPage() {
   const searchParams = useSearchParams();
   const selectedEmployeeId = searchParams.get('employee');
+  const { profile } = useAuth();
 
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
   const [userEmailMap, setUserEmailMap] = useState<{ [key: string]: string }>({});
+  const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   useEffect(() => {
     loadEmployees();
@@ -32,7 +38,7 @@ export default function AudioPage() {
     if (selectedEmployee) {
       loadRecordings(selectedEmployee);
     }
-  }, [selectedEmployee]);
+  }, [selectedEmployee, startDate, endDate]);
 
   async function loadEmployees() {
     try {
@@ -64,8 +70,18 @@ export default function AudioPage() {
     try {
       setLoading(true);
 
-      // Use the new centralized audio API
-      const response = await fetch(`/api/audio?employeeId=${employeeId}&limit=50`);
+      if (!profile?.organization_id) {
+        console.error('No organization ID found');
+        setLoading(false);
+        return;
+      }
+
+      // Use the new centralized audio API with organization filter and date range
+      let url = `/api/audio?employeeId=${employeeId}&organizationId=${profile.organization_id}&limit=50`;
+      if (startDate) url += `&startDate=${startDate}`;
+      if (endDate) url += `&endDate=${endDate}`;
+
+      const response = await fetch(url);
 
       if (response.ok) {
         const data = await response.json();
@@ -122,25 +138,75 @@ export default function AudioPage() {
           </div>
         </div>
 
-        {/* Employee Filter */}
+        {/* Filters */}
         <Card>
           <CardHeader>
-            <CardTitle>Select Employee</CardTitle>
+            <CardTitle>Filters</CardTitle>
           </CardHeader>
           <CardContent>
-            <select
-              value={selectedEmployee}
-              onChange={(e) => setSelectedEmployee(e.target.value)}
-              className="w-full max-w-xs bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
-              disabled={loading}
-            >
-              <option value="">Select an employee...</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.email}
-                </option>
-              ))}
-            </select>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-ink-hi mb-2">
+                  Employee
+                </label>
+                <select
+                  value={selectedEmployee}
+                  onChange={(e) => setSelectedEmployee(e.target.value)}
+                  className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={loading}
+                >
+                  <option value="">Select an employee...</option>
+                  {employees.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-ink-hi mb-2">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={loading}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-ink-hi mb-2">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={loading}
+                />
+              </div>
+            </div>
+            {(startDate || endDate) && (
+              <div className="mt-3 flex items-center justify-between">
+                <p className="text-sm text-ink-muted">
+                  {startDate && endDate ? `Showing recordings from ${startDate} to ${endDate}` :
+                   startDate ? `Showing recordings from ${startDate}` :
+                   `Showing recordings until ${endDate}`}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setStartDate('');
+                    setEndDate('');
+                  }}
+                >
+                  Clear Dates
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -214,6 +280,14 @@ export default function AudioPage() {
                             <source src={recording.file_url} type="audio/mp3" />
                             Your browser does not support the audio element.
                           </audio>
+                        ) : recording.session_info?.chunks && recording.session_info.chunks.length > 0 ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setExpandedSession(expandedSession === recording.id ? null : recording.id)}
+                          >
+                            {expandedSession === recording.id ? 'Hide' : 'Show'} {recording.session_info.chunks.length} Chunks
+                          </Button>
                         ) : (
                           <Badge variant="outline" size="sm">
                             No audio file available
@@ -221,6 +295,39 @@ export default function AudioPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* Expanded Chunks View */}
+                    {expandedSession === recording.id && recording.session_info?.chunks && (
+                      <div className="mt-4 pl-4 border-l-2 border-primary/20">
+                        <h4 className="text-sm font-medium text-ink-hi mb-3">Audio Chunks ({recording.session_info.chunks.length})</h4>
+                        <div className="space-y-3">
+                          {recording.session_info.chunks.map((chunk: any, index: number) => (
+                            <div key={chunk.id} className="p-3 bg-surface rounded-lg border border-line">
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-2 mb-1">
+                                    <Badge size="sm" variant="outline">Chunk {chunk.chunk_number}</Badge>
+                                    <span className="text-xs text-ink-muted">{chunk.duration_seconds}s</span>
+                                  </div>
+                                  <p className="text-xs text-ink-muted">{chunk.filename}</p>
+                                </div>
+                                {chunk.file_url && (
+                                  <audio
+                                    controls
+                                    className="w-48"
+                                    preload="metadata"
+                                  >
+                                    <source src={chunk.file_url} type="audio/webm" />
+                                    <source src={chunk.file_url} type="audio/wav" />
+                                    Your browser does not support the audio element.
+                                  </audio>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -238,20 +345,6 @@ export default function AudioPage() {
           </CardContent>
         </Card>
 
-        {/* Audio Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Audio Recording Information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm text-ink-muted space-y-2">
-              <p><strong>Audio Quality:</strong> Recordings are captured at the system&apos;s default quality settings</p>
-              <p><strong>Format Support:</strong> The player supports WebM, WAV, and MP3 audio formats</p>
-              <p><strong>Privacy:</strong> All audio recordings are stored securely and are only accessible by administrators</p>
-              <p><strong>Storage:</strong> Audio files are automatically organized by employee and date</p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </DashboardLayout>
   );

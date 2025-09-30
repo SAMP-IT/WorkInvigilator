@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Avatar } from '@/components/ui/Avatar';
+import { useAuth } from '@/lib/auth-context';
 import {
   Table,
   TableHeader,
@@ -40,6 +41,7 @@ interface Employee {
 }
 
 export default function SessionsPage() {
+  const { profile } = useAuth();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,18 +91,24 @@ export default function SessionsPage() {
       setLoading(true);
       setError(null);
 
-      // Load sessions
-      const sessionsResponse = await fetch('/api/sessions');
+      if (!profile?.organization_id) {
+        setError('No organization found');
+        setLoading(false);
+        return;
+      }
+
+      // Load sessions filtered by organization
+      const sessionsResponse = await fetch(`/api/sessions?organizationId=${profile.organization_id}`);
       if (sessionsResponse.ok) {
         const sessionsData = await sessionsResponse.json();
-        console.log('Sessions loaded:', sessionsData); // Debug log
+        console.log('Sessions loaded:', sessionsData);
         setSessions(sessionsData.sessions || []);
       } else {
         console.error('Failed to load sessions:', sessionsResponse.status);
       }
 
       // Load employees with session timing
-      const employeesResponse = await fetch('/api/employees');
+      const employeesResponse = await fetch(`/api/employees?organizationId=${profile.organization_id}`);
       if (employeesResponse.ok) {
         const employeesData = await employeesResponse.json();
         console.log('Sessions page - employees loaded:', employeesData); // Debug log
@@ -133,6 +141,38 @@ export default function SessionsPage() {
     if (percent >= 80) return 'text-success';
     if (percent >= 70) return 'text-warn';
     return 'text-danger';
+  };
+
+  const handleExportCSV = () => {
+    // Create CSV content
+    const headers = ['Employee Name', 'Employee ID', 'Start Time', 'End Time', 'Duration', 'Focus Time', 'Focus %', 'Status', 'Applications', 'Screenshots'];
+    const csvRows = [
+      headers.join(','),
+      ...filteredSessions.map(session => [
+        `"${session.employeeName}"`,
+        `"${session.employeeId}"`,
+        `"${session.startTime}"`,
+        `"${session.endTime}"`,
+        `"${session.duration}"`,
+        `"${session.focusTime}"`,
+        session.focusPercent,
+        session.status,
+        `"${session.apps.join('; ')}"`,
+        session.screenshots
+      ].join(','))
+    ];
+
+    // Create blob and download
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sessions_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -186,7 +226,7 @@ export default function SessionsPage() {
                 <option value="completed">Completed</option>
                 <option value="paused">Paused</option>
               </select>
-              <Button variant="outline">
+              <Button variant="outline" onClick={handleExportCSV}>
                 Export CSV
               </Button>
             </div>

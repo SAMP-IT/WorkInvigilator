@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Supabase client with service role key for admin operations
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the user
-    const { data, error } = await supabase.auth.admin.createUser({
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true, // Auto-confirm the email
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create profile record since admin-created users don't trigger the auto-profile creation
-    const { error: profileError } = await supabase
+    const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .insert({
         id: data.user.id,
