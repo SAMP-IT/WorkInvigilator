@@ -144,11 +144,6 @@ export function TopBar() {
     <div className="flex h-16 items-center justify-between px-6 bg-surface border-b border-line">
       {/* Left section */}
       <div className="flex items-center space-x-4">
-        {/* Environment badge */}
-        <Badge variant="info" size="sm">
-          PROD
-        </Badge>
-
         {/* Global search */}
         <div className="relative">
           <Input
@@ -161,16 +156,6 @@ export function TopBar() {
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
             <span className="text-ink-muted text-xs">⏎</span>
           </div>
-        </div>
-
-        {/* Live status */}
-        <div className="flex items-center space-x-2">
-          {activeSessions > 0 && (
-            <div className="w-2 h-2 bg-success rounded-full animate-pulse"></div>
-          )}
-          <span className="text-sm text-ink-mid">
-            {activeSessions} active session{activeSessions !== 1 ? 's' : ''}
-          </span>
         </div>
       </div>
 

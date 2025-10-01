@@ -3,120 +3,161 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Welcome - Audio Recorder Extension</title>
+  <title>Welcome - Work Invigilator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       margin: 0;
       padding: 20px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
       color: white;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
     }
+
     .welcome-container {
-      background: rgba(255, 255, 255, 0.95);
+      background: #1e293b;
       border-radius: 16px;
-      padding: 40px;
-      max-width: 500px;
+      padding: 48px;
+      max-width: 520px;
+      width: 100%;
       text-align: center;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-      backdrop-filter: blur(10px);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
-    h1 {
-      margin: 0 0 10px 0;
-      color: #2d3748;
-      font-size: 28px;
+
+    .logo-section {
+      margin-bottom: 24px;
     }
+
+    .app-title {
+      color: #f1f5f9;
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
     .subtitle {
-      color: #4a5568;
-      margin-bottom: 30px;
+      color: #94a3b8;
+      margin-bottom: 40px;
+      font-size: 16px;
+      font-weight: 400;
+    }
+
+    .mic-icon {
+      font-size: 72px;
+      margin: 32px 0;
+      display: block;
+      filter: drop-shadow(0 4px 12px rgba(59, 130, 246, 0.3));
+    }
+
+    .permission-section {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 32px 0;
+    }
+
+    .permission-title {
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 12px;
       font-size: 16px;
     }
-    .mic-icon {
-      font-size: 64px;
-      margin: 20px 0;
-      display: block;
-    }
-    .permission-section {
-      background: rgba(102, 126, 234, 0.1);
-      border-radius: 12px;
-      padding: 20px;
-      margin: 20px 0;
-    }
-    .permission-title {
-      font-weight: bold;
-      color: #2d3748;
-      margin-bottom: 10px;
-    }
+
     .permission-text {
-      color: #4a5568;
-      line-height: 1.5;
+      color: #cbd5e1;
+      line-height: 1.6;
+      font-size: 14px;
     }
+
     .btn {
-      background: #48bb78;
+      background: #3b82f6;
       color: white;
       border: none;
-      padding: 12px 24px;
+      padding: 14px 32px;
       border-radius: 8px;
       font-size: 16px;
-      font-weight: 500;
+      font-weight: 600;
       cursor: pointer;
-      margin: 10px;
+      width: 100%;
+      max-width: 280px;
       transition: all 0.2s ease;
+      font-family: 'Public Sans', sans-serif;
+      margin-top: 8px;
     }
+
     .btn:hover {
-      background: #38a169;
-      transform: translateY(-1px);
+      background: #2563eb;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
     }
-    .btn-secondary {
-      background: #718096;
+
+    .btn:active {
+      transform: translateY(0);
     }
-    .btn-secondary:hover {
-      background: #5a67d8;
-    }
+
     .status {
       margin: 20px 0;
-      padding: 10px;
+      padding: 14px;
       border-radius: 8px;
       display: none;
+      font-size: 14px;
+      font-weight: 500;
     }
+
     .status.success {
-      background: rgba(72, 187, 120, 0.1);
-      color: #2f855a;
-      border: 1px solid rgba(72, 187, 120, 0.2);
+      background: rgba(34, 197, 94, 0.15);
+      color: #86efac;
+      border: 1px solid rgba(34, 197, 94, 0.3);
     }
+
     .status.error {
-      background: rgba(229, 62, 62, 0.1);
-      color: #c53030;
-      border: 1px solid rgba(229, 62, 62, 0.2);
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .footer-text {
+      margin-top: 24px;
+      color: #64748b;
+      font-size: 13px;
     }
   </style>
 </head>
 <body>
   <div class="welcome-container">
-    <h1>🎙️ Welcome!</h1>
-    <p class="subtitle">Your Audio Recorder Extension is ready</p>
+    <div class="logo-section">
+      <h1 class="app-title">Work Invigilator</h1>
+      <p class="subtitle">Employee Monitoring Extension</p>
+    </div>
 
     <div class="mic-icon">🎤</div>
 
     <div class="permission-section">
       <div class="permission-title">Microphone Permission Required</div>
       <div class="permission-text">
-        To record audio from your microphone, we need your permission.
-        This allows the extension to access your laptop's microphone for recording purposes.
+        To monitor and record audio during work sessions, we need access to your microphone.
+        This permission allows the extension to capture audio for productivity tracking.
       </div>
     </div>
 
     <div id="status" class="status"></div>
 
     <button id="grant-btn" class="btn">Grant Microphone Access</button>
-    <button id="skip-btn" class="btn btn-secondary">Skip for Now</button>
 
-    <p style="margin-top: 20px; color: #718096; font-size: 14px;">
-      You can always grant permission later from the extension popup.
+    <p class="footer-text">
+      You can manage permissions anytime from the extension settings.
     </p>
   </div>
 

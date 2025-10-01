@@ -37,10 +37,6 @@
               <span id="user-role" class="user-role"></span>
             </div>
             <div class="user-actions">
-              <button id="admin-dashboard-btn" class="btn btn-primary btn-small admin-btn hidden">
-                <span class="btn-icon">🏢</span>
-                Admin Dashboard
-              </button>
               <button id="logout-btn" class="btn btn-secondary btn-small">
                 Logout
               </button>
@@ -96,21 +92,6 @@
 
       <!-- Main Monitoring Interface (hidden until authenticated) -->
       <div id="main-interface" class="main-interface hidden">
-        <!-- Status Overview -->
-        <div class="status-overview">
-          <div class="status-card">
-            <div class="status-header">
-              <h3>Session Status</h3>
-              <div id="session-indicator" class="status-indicator offline">
-                <span class="indicator-dot"></span>
-                <span class="indicator-text">Offline</span>
-              </div>
-            </div>
-            <div id="status-text" class="status-text">Ready to record</div>
-            <div id="recording-time" class="recording-time hidden">00:00:00</div>
-          </div>
-        </div>
-
         <!-- Permission Status -->
         <div id="permission-status" class="permission-card hidden">
           <div class="permission-header">
@@ -130,7 +111,7 @@
                     Work Invigilator OFF
                   </div>
                   <div id="toggle-subtitle" class="toggle-subtitle">
-                    Click to start monitoring session
+                    PUNCH IN
                   </div>
                 </div>
               </div>
@@ -140,20 +121,6 @@
           <!-- Monitoring Status Details -->
           <div id="monitoring-status" class="monitoring-status hidden">
             <div class="status-grid">
-              <div class="status-item">
-                <span class="status-icon">🎤</span>
-                <div class="status-info">
-                  <span class="status-label">Audio Recording</span>
-                  <span id="audio-status" class="status-value">Ready</span>
-                </div>
-              </div>
-              <div class="status-item">
-                <span class="status-icon">📸</span>
-                <div class="status-info">
-                  <span class="status-label">Screenshots</span>
-                  <span id="screenshot-status" class="status-value">Ready</span>
-                </div>
-              </div>
               <div class="status-item">
                 <span class="status-icon">⏱️</span>
                 <div class="status-info">
@@ -171,34 +138,6 @@
               </button>
             </div>
           </div>
-        </div>
-
-
-        <!-- Audio Waveform -->
-        <div class="waveform-section">
-          <div class="section-header">
-            <h4>Audio Activity</h4>
-          </div>
-          <div class="waveform-container" id="waveform-container">
-            <div class="waveform-placeholder">
-              <div class="wave-bar"></div>
-              <div class="wave-bar"></div>
-              <div class="wave-bar"></div>
-              <div class="wave-bar"></div>
-              <div class="wave-bar"></div>
-              <div class="wave-bar"></div>
-              <div class="wave-bar"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Recent Recordings -->
-        <div class="recordings-section">
-          <div class="section-header">
-            <h4>Recent Recordings</h4>
-            <span class="section-count" id="recordings-count">0 files</span>
-          </div>
-          <div id="recordings" class="recordings-list"></div>
         </div>
       </div>
       <!-- End main-interface -->

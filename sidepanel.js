@@ -46,7 +46,7 @@ class AudioRecorder {
 
     await this.auth.checkAuthState();
     this.checkMicrophonePermission();
-    this.storage.loadMonitoringState();
+    // Note: loadMonitoringState() is called in checkAuthState() after user is restored
     this.storage.loadBreakState();
     this.storage.loadRecordings();
     this.storage.loadScreenshots();
@@ -505,7 +505,7 @@ class UIManager {
     }
 
     if (this.elements.toggleSubtitle) {
-      this.elements.toggleSubtitle.textContent = isMonitoring ? 'Click to stop monitoring' : 'Click to start monitoring session';
+      this.elements.toggleSubtitle.textContent = isMonitoring ? 'PUNCH OUT' : 'Click to start monitoring session';
     }
 
     // Show/hide monitoring status
@@ -578,6 +578,7 @@ class UIManager {
 class AuthManager {
   constructor(app) {
     this.app = app;
+    this.tokenRefreshTimer = null;
   }
 
   async initializeSupabase() {
@@ -658,6 +659,7 @@ class AuthManager {
       // Set user data
       this.app.currentUser = authData.user;
       this.app.userRole = profile.role;
+      this.app.organizationId = profile.organization_id;
 
       // IMPORTANT: Set access token in Supabase client for authenticated requests
       if (this.app.supabase) {
@@ -669,8 +671,13 @@ class AuthManager {
       localStorage.setItem('currentUser', JSON.stringify(authData.user));
       localStorage.setItem('userRole', profile.role);
       localStorage.setItem('accessToken', authData.access_token);
+      localStorage.setItem('refreshToken', authData.refresh_token);
+      localStorage.setItem('organizationId', profile.organization_id);
 
       console.log('✅ Side panel login successful:', authData.user.email, 'Role:', profile.role);
+
+      // Set up auto token refresh (refresh 5 minutes before expiry)
+      this.setupTokenRefresh(authData.expires_in);
 
       this.app.ui.showAuthenticatedView(this.app.currentUser, this.app.userRole);
       return true;
@@ -691,6 +698,107 @@ class AuthManager {
   async checkAuthState() {
     // Check if user is already authenticated
     console.log('🔍 Checking authentication state for side panel');
+
+    const storedUser = localStorage.getItem('currentUser');
+    const storedRole = localStorage.getItem('userRole');
+    const storedToken = localStorage.getItem('accessToken');
+    const storedOrgId = localStorage.getItem('organizationId');
+
+    if (storedUser && storedToken) {
+      try {
+        // Restore user data
+        this.app.currentUser = JSON.parse(storedUser);
+        this.app.userRole = storedRole;
+        this.app.organizationId = storedOrgId;
+
+        // Token already set in initializeApp(), just verify it's working
+        console.log('✅ User session restored:', this.app.currentUser.email, 'Role:', this.app.userRole);
+
+        // Set up auto token refresh (default to 50 minutes if expires_in not stored)
+        this.setupTokenRefresh(3000); // 50 minutes
+
+        // Show authenticated view
+        this.app.ui.showAuthenticatedView(this.app.currentUser, this.app.userRole);
+
+        // Now that user is restored, load monitoring state
+        setTimeout(() => {
+          this.app.storage.loadMonitoringState();
+        }, 500);
+
+      } catch (error) {
+        console.error('❌ Failed to restore session:', error);
+        this.app.ui.showUnauthenticatedView();
+      }
+    } else {
+      console.log('ℹ️ No stored session found');
+      this.app.ui.showUnauthenticatedView();
+    }
+  }
+
+  setupTokenRefresh(expiresIn) {
+    // Clear any existing refresh timer
+    if (this.tokenRefreshTimer) {
+      clearTimeout(this.tokenRefreshTimer);
+    }
+
+    // Refresh token 5 minutes before expiry (or halfway through if less than 10 min)
+    const refreshTime = Math.max((expiresIn - 300) * 1000, (expiresIn / 2) * 1000);
+
+    console.log(`🔄 Token will refresh in ${Math.floor(refreshTime / 60000)} minutes`);
+
+    this.tokenRefreshTimer = setTimeout(async () => {
+      await this.refreshAccessToken();
+    }, refreshTime);
+  }
+
+  async refreshAccessToken() {
+    const refreshToken = localStorage.getItem('refreshToken');
+
+    if (!refreshToken) {
+      console.error('❌ No refresh token available');
+      await this.logout();
+      return;
+    }
+
+    try {
+      console.log('🔄 Refreshing access token...');
+
+      const manifest = chrome.runtime.getManifest();
+      const supabaseUrl = manifest.supabase_config.url;
+      const supabaseKey = manifest.supabase_config.anon_key;
+
+      const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ refresh_token: refreshToken })
+      });
+
+      const authData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(authData.error_description || 'Token refresh failed');
+      }
+
+      // Update tokens
+      localStorage.setItem('accessToken', authData.access_token);
+      localStorage.setItem('refreshToken', authData.refresh_token);
+
+      if (this.app.supabase) {
+        this.app.supabase.setAccessToken(authData.access_token);
+      }
+
+      console.log('✅ Access token refreshed successfully');
+
+      // Schedule next refresh
+      this.setupTokenRefresh(authData.expires_in);
+
+    } catch (error) {
+      console.error('❌ Token refresh failed:', error);
+      await this.logout();
+    }
   }
 }
 
@@ -923,13 +1031,28 @@ class StorageManager {
   }
 
   loadMonitoringState() {
-    chrome.storage.local.get(['isMonitoring', 'sessionStartTime'], (result) => {
-      if (result.isMonitoring) {
+    chrome.storage.local.get(['isMonitoring', 'sessionStartTime'], async (result) => {
+      if (result.isMonitoring && this.app.currentUser) {
+        console.log('🔄 Restoring monitoring session...');
         this.app.isMonitoring = result.isMonitoring;
         if (result.sessionStartTime) {
           this.app.sessionStartTime = new Date(result.sessionStartTime);
         }
+
+        // Resume audio recording
+        await this.app.recording.startRecording();
+
+        // Restart screenshot capture
+        this.app.startScreenshotCapture();
+
+        // Restart session timer
+        this.app.startSessionTimer();
+
+        // Update UI
         this.app.ui.updateMonitoringState(this.app.isMonitoring);
+        this.app.ui.updateSessionStatus('online');
+
+        console.log('✅ Monitoring session restored successfully');
       }
     });
   }
@@ -1033,16 +1156,19 @@ class StorageManager {
       const { data: sessions, error } = await this.app.supabase
         .from('recording_sessions')
         .select('*')
-        .eq('user_id', this.app.currentUser.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
+        .eq('user_id', this.app.currentUser.id);
 
       if (error) {
         console.error('❌ Load recordings error:', error);
         this.app.ui.updateRecordingsCount(0);
       } else {
-        this.app.ui.updateRecordingsCount(sessions?.length || 0);
-        console.log(`📁 Loaded ${sessions?.length || 0} recording sessions`);
+        // Sort in memory since .order() is not available
+        const sortedSessions = sessions?.sort((a, b) =>
+          new Date(b.created_at) - new Date(a.created_at)
+        ).slice(0, 10) || [];
+
+        this.app.ui.updateRecordingsCount(sortedSessions.length);
+        console.log(`📁 Loaded ${sortedSessions.length} recording sessions`);
       }
 
     } catch (error) {
@@ -1060,14 +1186,17 @@ class StorageManager {
       const { data: screenshots, error } = await this.app.supabase
         .from('screenshots')
         .select('*')
-        .eq('user_id', this.app.currentUser.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
+        .eq('user_id', this.app.currentUser.id);
 
       if (error) {
         console.error('❌ Load screenshots error:', error);
       } else {
-        console.log(`🖼️ Loaded ${screenshots?.length || 0} screenshots`);
+        // Sort in memory since .order() is not available
+        const sortedScreenshots = screenshots?.sort((a, b) =>
+          new Date(b.created_at) - new Date(a.created_at)
+        ).slice(0, 20) || [];
+
+        console.log(`🖼️ Loaded ${sortedScreenshots.length} screenshots`);
       }
 
     } catch (error) {

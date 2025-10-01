@@ -186,43 +186,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate a UUID for the new user
-    const userId = crypto.randomUUID()
-
-    // Try to create user with regular signup first
-    const { data: signUpData, error: signUpError } = await supabaseAdmin.auth.signUp({
+    // Use Admin API to create user (bypasses email confirmation)
+    const { data: createUserData, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      options: {
-        data: {
-          name,
-          role: role || 'user'
-        }
+      email_confirm: true, // Auto-confirm email
+      user_metadata: {
+        name,
+        role: role || 'user'
       }
     })
 
-    if (signUpError) {
-      console.error('Sign up error:', signUpError)
+    if (createUserError) {
+      console.error('Create user error:', createUserError)
       return NextResponse.json(
-        { error: `Failed to create user: ${signUpError.message}` },
+        { error: `Failed to create user: ${createUserError.message}` },
         { status: 400 }
       )
     }
 
-    if (!signUpData.user) {
+    if (!createUserData.user) {
       return NextResponse.json(
         { error: 'User creation failed - no user returned' },
         { status: 500 }
       )
     }
 
-    console.log('User signed up:', signUpData.user.id)
+    console.log('User created:', createUserData.user.id)
 
     // Now create/update the profile with organization
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({
-        id: signUpData.user.id,
+        id: createUserData.user.id,
         email,
         name,
         department: department || 'General',
@@ -249,9 +245,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       employee: profile,
       user: {
-        id: signUpData.user.id,
-        email: signUpData.user.email,
-        emailConfirmed: signUpData.user.email_confirmed_at ? true : false
+        id: createUserData.user.id,
+        email: createUserData.user.email,
+        emailConfirmed: createUserData.user.email_confirmed_at ? true : false
       },
       message: 'Employee created successfully!'
     })
