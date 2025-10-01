@@ -1,23 +1,35 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Lazy initialization to prevent build-time errors
-let supabaseInstance: ReturnType<typeof createClient> | null = null
+// Get Supabase client with proper initialization
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export const supabase = (() => {
-  if (!supabaseInstance) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-    // Only create client if we have valid credentials
-    if (supabaseUrl && supabaseAnonKey) {
-      supabaseInstance = createClient(supabaseUrl, supabaseAnonKey)
-    } else {
-      // During build time, return a mock client to prevent errors
-      supabaseInstance = createClient('https://placeholder.supabase.co', 'placeholder-key')
-    }
+  if (!supabaseUrl || !supabaseAnonKey) {
+    // During build time or if env vars are missing, throw an error that will be caught
+    throw new Error('Supabase environment variables are not configured')
   }
-  return supabaseInstance
-})()
+
+  return createClient(supabaseUrl, supabaseAnonKey)
+}
+
+// Export a getter that creates the client lazily
+let cachedClient: ReturnType<typeof getSupabaseClient> | null = null
+
+export const supabase = new Proxy({} as ReturnType<typeof getSupabaseClient>, {
+  get(target, prop) {
+    if (!cachedClient) {
+      try {
+        cachedClient = getSupabaseClient()
+      } catch (error) {
+        // During build time, return a mock that won't be actually called
+        console.warn('Supabase client not initialized:', error)
+        return undefined
+      }
+    }
+    return cachedClient[prop as keyof ReturnType<typeof getSupabaseClient>]
+  }
+})
 
 // Database types (can be generated from Supabase CLI)
 export interface Profile {

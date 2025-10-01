@@ -77,7 +77,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             const { data: newProfile, error: createError } = await supabase
               .from('profiles')
-              // @ts-expect-error - Supabase generated types are incorrect for insert operation
               .insert([{
                 id: userId,
                 email: user.user.email,
