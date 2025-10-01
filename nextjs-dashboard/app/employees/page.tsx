@@ -1,23 +1,26 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Avatar } from '@/components/ui/Avatar';
-import { Modal } from '@/components/ui/Modal';
+import { useState, useEffect } from "react";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Avatar } from "@/components/ui/Avatar";
+import { Modal } from "@/components/ui/Modal";
 import {
   Table,
   TableHeader,
   TableBody,
   TableRow,
   TableHead,
-  TableCell
-} from '@/components/ui/Table';
-import { AddEmployeeForm, type EmployeeFormData } from '@/components/forms/AddEmployeeForm';
-import { useAuth } from '@/lib/auth-context';
+  TableCell,
+} from "@/components/ui/Table";
+import {
+  AddEmployeeForm,
+  type EmployeeFormData,
+} from "@/components/forms/AddEmployeeForm";
+import { useAuth } from "@/lib/auth-context";
 
 interface Employee {
   id: string;
@@ -29,7 +32,7 @@ interface Employee {
   avgBreakHDay: number;
   avgSessionMin: number;
   lastActive: string;
-  status: 'online' | 'offline';
+  status: "online" | "offline";
   createdAt: string;
   shiftStartTime?: string;
   shiftEndTime?: string;
@@ -41,28 +44,32 @@ export default function EmployeesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [departmentFilter, setDepartmentFilter] = useState('all');
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         emp.department.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDepartment = departmentFilter === 'all' || emp.department === departmentFilter;
-    const matchesRole = roleFilter === 'all' || emp.role === roleFilter;
-    const matchesStatus = statusFilter === 'all' || emp.status === statusFilter;
+  const filteredEmployees = employees.filter((emp) => {
+    const matchesSearch =
+      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.department.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDepartment =
+      departmentFilter === "all" || emp.department === departmentFilter;
+    const matchesRole = roleFilter === "all" || emp.role === roleFilter;
+    const matchesStatus = statusFilter === "all" || emp.status === statusFilter;
 
     return matchesSearch && matchesDepartment && matchesRole && matchesStatus;
   });
 
-  const uniqueDepartments = Array.from(new Set(employees.map(emp => emp.department)));
-  const uniqueRoles = Array.from(new Set(employees.map(emp => emp.role)));
+  const uniqueDepartments = Array.from(
+    new Set(employees.map((emp) => emp.department))
+  );
+  const uniqueRoles = Array.from(new Set(employees.map((emp) => emp.role)));
 
   useEffect(() => {
     loadEmployees();
@@ -74,23 +81,25 @@ export default function EmployeesPage() {
       setError(null);
 
       if (!profile?.organization_id) {
-        setError('No organization found');
+        setError("No organization found");
         setLoading(false);
         return;
       }
 
-      const response = await fetch(`/api/employees?organizationId=${profile.organization_id}`);
+      const response = await fetch(
+        `/api/employees?organizationId=${profile.organization_id}`
+      );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch employees');
+        throw new Error("Failed to fetch employees");
       }
 
       const data = await response.json();
-      console.log('Employees page - loaded data:', data); // Debug log
+      console.log("Employees page - loaded data:", data); // Debug log
       setEmployees(data.employees || []);
     } catch (err) {
-      console.error('Error loading employees:', err);
-      setError('Failed to load employees. Please try again.');
+      console.error("Error loading employees:", err);
+      setError("Failed to load employees. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -102,29 +111,41 @@ export default function EmployeesPage() {
 
   const handleExportCSV = () => {
     // Create CSV content
-    const headers = ['Name', 'Email', 'Department', 'Role', 'Productivity %', 'Avg Break (h)', 'Avg Session (min)', 'Last Active', 'Status'];
+    const headers = [
+      "Name",
+      "Email",
+      "Department",
+      "Role",
+      "Productivity %",
+      "Avg Break (h)",
+      "Avg Session (min)",
+      "Last Active",
+      "Status",
+    ];
     const csvRows = [
-      headers.join(','),
-      ...filteredEmployees.map(emp => [
-        `"${emp.name}"`,
-        `"${emp.email}"`,
-        `"${emp.department}"`,
-        `"${emp.role}"`,
-        emp.productivity7d.toFixed(1),
-        emp.avgBreakHDay.toFixed(1),
-        emp.avgSessionMin,
-        `"${emp.lastActive}"`,
-        emp.status
-      ].join(','))
+      headers.join(","),
+      ...filteredEmployees.map((emp) =>
+        [
+          `"${emp.name}"`,
+          `"${emp.email}"`,
+          `"${emp.department}"`,
+          `"${emp.role}"`,
+          emp.productivity7d.toFixed(1),
+          emp.avgBreakHDay.toFixed(1),
+          emp.avgSessionMin,
+          `"${emp.lastActive}"`,
+          emp.status,
+        ].join(",")
+      ),
     ];
 
     // Create blob and download
-    const csvContent = csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const csvContent = csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `employees_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `employees_${new Date().toISOString().split("T")[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -136,27 +157,27 @@ export default function EmployeesPage() {
 
     try {
       if (!profile?.organization_id) {
-        throw new Error('No organization found');
+        throw new Error("No organization found");
       }
 
-      const response = await fetch('/api/employees', {
-        method: 'POST',
+      const response = await fetch("/api/employees", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           ...formData,
-          organizationId: profile.organization_id
+          organizationId: profile.organization_id,
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create employee');
+        throw new Error(errorData.error || "Failed to create employee");
       }
 
       const data = await response.json();
-      console.log('Employee created:', data);
+      console.log("Employee created:", data);
 
       // Show success message
       setSuccessMessage(`Employee ${formData.name} created successfully!`);
@@ -165,10 +186,11 @@ export default function EmployeesPage() {
       // Close modal and refresh employee list
       setShowAddModal(false);
       await loadEmployees();
-
     } catch (error) {
-      console.error('Error creating employee:', error);
-      setError(error instanceof Error ? error.message : 'Failed to create employee');
+      console.error("Error creating employee:", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to create employee"
+      );
     } finally {
       setIsCreating(false);
     }
@@ -181,8 +203,18 @@ export default function EmployeesPage() {
         {successMessage && (
           <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                className="w-5 h-5 text-green-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               <span className="font-medium">{successMessage}</span>
             </div>
@@ -190,8 +222,18 @@ export default function EmployeesPage() {
               onClick={() => setSuccessMessage(null)}
               className="text-green-600 hover:text-green-800"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
@@ -201,8 +243,18 @@ export default function EmployeesPage() {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                className="w-5 h-5 text-red-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               <span className="font-medium">{error}</span>
             </div>
@@ -210,8 +262,18 @@ export default function EmployeesPage() {
               onClick={() => setError(null)}
               className="text-red-600 hover:text-red-800"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
@@ -220,12 +282,16 @@ export default function EmployeesPage() {
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-ui text-2xl tracking-tightish font-semibold text-ink-hi">Employees</h1>
-            <p className="font-ui text-sm text-ink-muted">Manage team members and monitor productivity</p>
+            <h1 className="font-ui text-2xl tracking-tightish font-semibold text-ink-hi">
+              Employees
+            </h1>
+            <p className="font-ui text-sm text-ink-muted">
+              Manage team members and monitor productivity
+            </p>
           </div>
           <div className="flex items-center space-x-3">
             <Badge variant="info">
-              {loading ? '...' : employees.length} Total
+              {loading ? "..." : employees.length} Total
             </Badge>
             <Button onClick={() => setShowAddModal(true)}>
               + Add Employee
@@ -245,8 +311,11 @@ export default function EmployeesPage() {
                   className="w-full"
                 />
               </div>
-              <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
-                Filters {showFilters ? '▲' : '▼'}
+              <Button
+                variant="outline"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                Filters {showFilters ? "▲" : "▼"}
               </Button>
               <Button variant="outline" onClick={handleExportCSV}>
                 Export CSV
@@ -270,8 +339,10 @@ export default function EmployeesPage() {
                     className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="all">All Departments</option>
-                    {uniqueDepartments.map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
+                    {uniqueDepartments.map((dept) => (
+                      <option key={dept} value={dept}>
+                        {dept}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -285,8 +356,10 @@ export default function EmployeesPage() {
                     className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="all">All Roles</option>
-                    {uniqueRoles.map(role => (
-                      <option key={role} value={role}>{role}</option>
+                    {uniqueRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -307,15 +380,16 @@ export default function EmployeesPage() {
               </div>
               <div className="mt-4 flex items-center justify-between">
                 <Badge variant="info">
-                  Showing {filteredEmployees.length} of {employees.length} employees
+                  Showing {filteredEmployees.length} of {employees.length}{" "}
+                  employees
                 </Badge>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setDepartmentFilter('all');
-                    setRoleFilter('all');
-                    setStatusFilter('all');
+                    setDepartmentFilter("all");
+                    setRoleFilter("all");
+                    setStatusFilter("all");
                   }}
                 >
                   Clear Filters
@@ -333,7 +407,7 @@ export default function EmployeesPage() {
                 <TableHead>Employee</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead sortable>Productivity %</TableHead>
+                <TableHead sortable>Productivity</TableHead>
                 <TableHead sortable>Avg Break</TableHead>
                 <TableHead sortable>Avg Session</TableHead>
                 <TableHead sortable>Last Active</TableHead>
@@ -354,20 +428,39 @@ export default function EmployeesPage() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell><div className="h-4 bg-gray-300 rounded w-20 animate-pulse"></div></TableCell>
-                    <TableCell><div className="h-6 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
-                    <TableCell><div className="h-4 bg-gray-300 rounded w-12 animate-pulse"></div></TableCell>
-                    <TableCell><div className="h-4 bg-gray-300 rounded w-12 animate-pulse"></div></TableCell>
-                    <TableCell><div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
-                    <TableCell><div className="h-4 bg-gray-300 rounded w-24 animate-pulse"></div></TableCell>
-                    <TableCell><div className="h-8 bg-gray-300 rounded w-20 animate-pulse"></div></TableCell>
+                    <TableCell>
+                      <div className="h-4 bg-gray-300 rounded w-20 animate-pulse"></div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-6 bg-gray-300 rounded w-16 animate-pulse"></div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-4 bg-gray-300 rounded w-12 animate-pulse"></div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-4 bg-gray-300 rounded w-12 animate-pulse"></div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-4 bg-gray-300 rounded w-24 animate-pulse"></div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-8 bg-gray-300 rounded w-20 animate-pulse"></div>
+                    </TableCell>
                   </TableRow>
                 ))
               ) : error ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8">
                     <div className="text-danger text-sm">{error}</div>
-                    <Button variant="outline" size="sm" onClick={loadEmployees} className="mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={loadEmployees}
+                      className="mt-2"
+                    >
                       Try Again
                     </Button>
                   </TableCell>
@@ -376,83 +469,95 @@ export default function EmployeesPage() {
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8">
                     <div className="text-ink-muted">
-                      {searchTerm ? 'No employees found matching your search.' : 'No employees found.'}
+                      {searchTerm
+                        ? "No employees found matching your search."
+                        : "No employees found."}
                     </div>
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredEmployees.map((employee) => (
-                <TableRow
-                  key={employee.id}
-                  onClick={() => setSelectedEmployee(employee.id)}
-                  selected={selectedEmployee === employee.id}
-                >
-                  <TableCell>
-                    <div className="flex items-center space-x-3">
-                      <Avatar
-                        fallback={employee.name}
-                        status={employee.status}
-                        size="sm"
-                      />
-                      <div>
-                        <div className="font-ui font-medium text-ink-hi">{employee.name}</div>
-                        <div className="font-ui text-sm text-ink-muted">{employee.email}</div>
+                  <TableRow
+                    key={employee.id}
+                    onClick={() => setSelectedEmployee(employee.id)}
+                    selected={selectedEmployee === employee.id}
+                  >
+                    <TableCell>
+                      <div className="flex items-center space-x-3">
+                        <Avatar
+                          fallback={employee.name}
+                          status={employee.status}
+                          size="sm"
+                        />
+                        <div>
+                          <div className="font-ui font-medium text-ink-hi">
+                            {employee.name}
+                          </div>
+                          <div className="font-ui text-sm text-ink-muted">
+                            {employee.email}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-ink-mid">{employee.department}</span>
-                  </TableCell>
-                  <TableCell>
-                    {employee.role === 'ADMIN' ? (
-                      <Badge variant="warning" size="sm">ADMIN</Badge>
-                    ) : (
-                      <Badge variant="default" size="sm">USER</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <span className="cell-num font-mono">
-                        {formatProductivity(employee.productivity7d)}
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-ink-mid">
+                        {employee.department}
                       </span>
-                      <div
-                        className={`w-2 h-2 rounded-full ${
-                          employee.productivity7d >= 90
-                            ? 'bg-success'
-                            : employee.productivity7d >= 75
-                            ? 'bg-warn'
-                            : 'bg-danger'
-                        }`}
-                      />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="cell-num font-mono text-ink-mid">
-                      {formatHours(employee.avgBreakHDay)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="cell-num font-mono text-ink-mid">
-                      {formatMinutes(employee.avgSessionMin)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="cell-num font-mono text-sm text-ink-muted">
-                      {employee.lastActive}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Button variant="ghost" size="sm">
-                        View
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        •••
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    <TableCell>
+                      {employee.role === "ADMIN" ? (
+                        <Badge variant="warning" size="sm">
+                          ADMIN
+                        </Badge>
+                      ) : (
+                        <Badge variant="default" size="sm">
+                          USER
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        <span className="cell-num font-mono">
+                          {formatProductivity(employee.productivity7d)}
+                        </span>
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            employee.productivity7d >= 90
+                              ? "bg-success"
+                              : employee.productivity7d >= 75
+                              ? "bg-warn"
+                              : "bg-danger"
+                          }`}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="cell-num font-mono text-ink-mid">
+                        {formatHours(employee.avgBreakHDay)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="cell-num font-mono text-ink-mid">
+                        {formatMinutes(employee.avgSessionMin)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="cell-num font-mono text-sm text-ink-muted">
+                        {employee.lastActive}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        <Button variant="ghost" size="sm">
+                          View
+                        </Button>
+                        <Button variant="ghost" size="sm">
+                          •••
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>
@@ -475,7 +580,9 @@ export default function EmployeesPage() {
             </CardHeader>
             <CardContent>
               {(() => {
-                const employee = employees.find(e => e.id === selectedEmployee);
+                const employee = employees.find(
+                  (e) => e.id === selectedEmployee
+                );
                 if (!employee) return null;
 
                 return (
@@ -488,9 +595,16 @@ export default function EmployeesPage() {
                         size="lg"
                         className="mx-auto mb-3"
                       />
-                      <h3 className="text-lg font-semibold text-ink-hi">{employee.name}</h3>
+                      <h3 className="text-lg font-semibold text-ink-hi">
+                        {employee.name}
+                      </h3>
                       <p className="text-ink-muted">{employee.email}</p>
-                      <Badge variant={employee.role === 'ADMIN' ? 'warning' : 'default'} className="mt-2">
+                      <Badge
+                        variant={
+                          employee.role === "ADMIN" ? "warning" : "default"
+                        }
+                        className="mt-2"
+                      >
                         {employee.role}
                       </Badge>
                     </div>
@@ -498,7 +612,9 @@ export default function EmployeesPage() {
                     {/* Quick Stats */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-raised p-3 rounded-lg">
-                        <div className="text-xs text-ink-muted">Productivity</div>
+                        <div className="text-xs text-ink-muted">
+                          Productivity
+                        </div>
                         <div className="text-lg font-semibold text-ink-hi font-mono">
                           {formatProductivity(employee.productivity7d)}
                         </div>
@@ -513,10 +629,15 @@ export default function EmployeesPage() {
 
                     {/* Screenshots Gallery */}
                     <div className="space-y-4">
-                      <h4 className="font-medium text-ink-hi">Recent Screenshots</h4>
+                      <h4 className="font-medium text-ink-hi">
+                        Recent Screenshots
+                      </h4>
                       <div className="grid grid-cols-2 gap-2">
                         {Array.from({ length: 4 }).map((_, i) => (
-                          <div key={i} className="aspect-video bg-raised rounded border border-line flex items-center justify-center">
+                          <div
+                            key={i}
+                            className="aspect-video bg-raised rounded border border-line flex items-center justify-center"
+                          >
                             <span className="text-ink-muted text-xs">📸</span>
                           </div>
                         ))}
@@ -528,9 +649,7 @@ export default function EmployeesPage() {
                       <Button variant="outline" className="flex-1">
                         View Timeline
                       </Button>
-                      <Button className="flex-1">
-                        Export Data
-                      </Button>
+                      <Button className="flex-1">Export Data</Button>
                     </div>
                   </div>
                 );
