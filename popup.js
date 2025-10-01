@@ -298,6 +298,7 @@ class AudioRecorder {
         .from('screenshots')
         .insert([{
           user_id: this.currentUser.id,
+          organization_id: this.organizationId,
           filename: filename,
           file_url: urlData.publicUrl
         }]);
