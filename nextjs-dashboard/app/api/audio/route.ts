@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
 
+    console.log('🎵 Audio API called:', { employeeId, organizationId, startDate, endDate, limit })
+
     if (!employeeId) {
       return NextResponse.json(
         { error: 'Employee ID is required' },
@@ -34,12 +36,16 @@ export async function GET(request: NextRequest) {
 
     // Apply date filters if provided
     if (startDate) {
-      chunksQuery = chunksQuery.gte('created_at', new Date(startDate).toISOString())
+      // Date from HTML5 input is in yyyy-mm-dd format, parse as UTC
+      const startDateTime = new Date(startDate + 'T00:00:00Z')
+      console.log('🎵 Parsed startDate:', { input: startDate, parsed: startDateTime.toISOString() })
+      chunksQuery = chunksQuery.gte('created_at', startDateTime.toISOString())
     }
     if (endDate) {
-      // Add 1 day to endDate to include the entire end date
-      const endDateTime = new Date(endDate)
-      endDateTime.setDate(endDateTime.getDate() + 1)
+      // Date from HTML5 input is in yyyy-mm-dd format, add 1 day to include the entire end date, parse as UTC
+      const endDateTime = new Date(endDate + 'T00:00:00Z')
+      endDateTime.setUTCDate(endDateTime.getUTCDate() + 1)
+      console.log('🎵 Parsed endDate:', { input: endDate, parsed: endDateTime.toISOString() })
       chunksQuery = chunksQuery.lt('created_at', endDateTime.toISOString())
     }
 
@@ -48,6 +54,8 @@ export async function GET(request: NextRequest) {
       .range(offset, offset + limit - 1)
 
     const { data: chunks, error: chunksError } = await chunksQuery
+
+    console.log('🎵 Audio chunks found:', chunks?.length || 0, 'Error:', chunksError)
 
     // Get employee profile separately
     const { data: profile } = await supabaseAdmin

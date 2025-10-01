@@ -95,9 +95,9 @@ export default function EmployeesPage() {
     }
   };
 
-  const formatProductivity = (value: number) => `${value.toFixed(1)}%`;
-  const formatHours = (value: number) => `${value.toFixed(1)}h`;
-  const formatMinutes = (value: number) => `${value}min`;
+  const formatProductivity = (value: number) => `${(value || 0).toFixed(1)}%`;
+  const formatHours = (value: number) => `${(value || 0).toFixed(1)}h`;
+  const formatMinutes = (value: number) => `${value || 0}min`;
 
   const handleExportCSV = () => {
     // Create CSV content

@@ -836,6 +836,7 @@ class RecordingManager {
         .from('recording_chunks')
         .insert([{
           user_id: this.app.currentUser.id,
+          organization_id: this.app.organizationId,
           session_start_time: new Date(this.app.sessionStartTime).toISOString(),
           chunk_number: chunkNumber,
           filename: filename,

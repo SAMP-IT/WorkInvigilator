@@ -81,8 +81,18 @@ export async function GET(request: NextRequest) {
         const productivity7d = totalWorkSeconds > 0 ?
           Number(((totalFocusSeconds / totalWorkSeconds) * 100).toFixed(1)) : 0
 
-        const avgFocusHDay = totalFocusSeconds > 0 ?
-          Number((totalFocusSeconds / (7 * 3600)).toFixed(1)) : 0
+        // Get break sessions for this employee (last 7 days)
+        const { data: breakSessions } = await supabaseAdmin
+          .from('break_sessions')
+          .select('break_duration_ms')
+          .eq('user_id', employee.id)
+          .eq('organization_id', organizationId)
+          .gte('break_date', sevenDaysAgo)
+
+        const totalBreakMs = breakSessions?.reduce((sum, b) => sum + (b.break_duration_ms || 0), 0) || 0
+        const totalBreakSeconds = Math.floor(totalBreakMs / 1000)
+        const avgBreakHDay = totalBreakSeconds > 0 ?
+          Number((totalBreakSeconds / (7 * 3600)).toFixed(1)) : 0
 
         const avgSessionMin = sessions && sessions.length > 0 ?
           Math.round((totalWorkSeconds / sessions.length) / 60) : 0
@@ -115,7 +125,7 @@ export async function GET(request: NextRequest) {
           department: employee.department || 'General',
           role: employee.role || 'user',
           productivity7d,
-          avgFocusHDay,
+          avgBreakHDay,
           avgSessionMin,
           lastActive,
           status: status as 'online' | 'offline',
