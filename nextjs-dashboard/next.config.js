@@ -10,6 +10,8 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
+  // Silence workspace root warning
+  outputFileTracingRoot: require('path').join(__dirname, '..'),
 }
 
 module.exports = nextConfig

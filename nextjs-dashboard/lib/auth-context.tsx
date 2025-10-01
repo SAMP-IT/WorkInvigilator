@@ -73,16 +73,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               .from('organizations')
               .select('id')
               .eq('name', 'Default Organization')
-              .single()
+              .single() as { data: { id?: string } | null }
 
             const { data: newProfile, error: createError } = await supabase
               .from('profiles')
-              .insert({
+              // @ts-expect-error - Supabase generated types are incorrect for insert operation
+              .insert([{
                 id: userId,
                 email: user.user.email,
                 role: 'admin', // Default to admin for manual signups
                 organization_id: defaultOrg?.id || null
-              })
+              }])
               .select('*, organizations(id, name)')
               .single()
 

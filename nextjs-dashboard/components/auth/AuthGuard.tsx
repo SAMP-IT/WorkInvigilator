@@ -30,7 +30,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
           .from('profiles')
           .select('role')
           .eq('id', session.user.id)
-          .single();
+          .single() as { data: { role?: 'admin' | 'user' } | null };
 
         const role = profile?.role || 'user';
         setUserRole(role);

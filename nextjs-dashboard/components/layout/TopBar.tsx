@@ -73,7 +73,7 @@ export function TopBar() {
           .from('profiles')
           .select('name, role')
           .eq('id', session.user.id)
-          .single();
+          .single() as { data: { name?: string; role?: 'admin' | 'user' } | null };
 
         setUser({
           id: session.user.id,
@@ -96,7 +96,7 @@ export function TopBar() {
           .from('profiles')
           .select('name, role')
           .eq('id', session.user.id)
-          .single();
+          .single() as { data: { name?: string; role?: 'admin' | 'user' } | null };
 
         setUser({
           id: session.user.id,
