@@ -1,14 +1,36 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Server-side admin client with service role key
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+// Get admin Supabase client with proper initialization
+function getSupabaseAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-// Create admin client for server-side operations
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Supabase admin environment variables are not configured')
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  })
+}
+
+// Export a getter that creates the admin client lazily
+let cachedAdminClient: ReturnType<typeof getSupabaseAdminClient> | null = null
+
+export const supabaseAdmin = new Proxy({} as ReturnType<typeof getSupabaseAdminClient>, {
+  get(target, prop) {
+    if (!cachedAdminClient) {
+      try {
+        cachedAdminClient = getSupabaseAdminClient()
+      } catch (error) {
+        console.warn('Supabase admin client not initialized:', error)
+        return undefined
+      }
+    }
+    return cachedAdminClient[prop as keyof ReturnType<typeof getSupabaseAdminClient>]
   }
 })
 
