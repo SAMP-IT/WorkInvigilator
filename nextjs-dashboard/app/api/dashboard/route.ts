@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     // Get date range based on period
     let startDate: Date
-    let endDate = new Date()
+    const endDate = new Date()
 
     switch (period) {
       case 'today':
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     const activeProfileMap = (activeProfiles || []).reduce((acc, p) => {
       acc[p.id] = p
       return acc
-    }, {} as Record<string, any>)
+    }, {} as Record<string, { id: string; name: string; email: string }>)
 
     // Get all employees from this organization
     const { data: allEmployees } = await supabaseAdmin
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     const screenshotProfileMap = (screenshotProfiles || []).reduce((acc, p) => {
       acc[p.id] = p
       return acc
-    }, {} as Record<string, any>)
+    }, {} as Record<string, { id: string; name: string; email: string }>)
 
     // Calculate key metrics
     const totalEmployees = allEmployees?.length || 0
@@ -263,7 +263,7 @@ export async function GET(request: NextRequest) {
 // POST endpoint for real-time updates or actions
 export async function POST(request: NextRequest) {
   try {
-    const { action, data } = await request.json()
+    const { action } = await request.json()
 
     switch (action) {
       case 'refresh':

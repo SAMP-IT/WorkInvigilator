@@ -412,9 +412,9 @@ export default function SessionsPage() {
                       <p className="text-ink-muted">Employee ID: {employee.employeeId}</p>
                     </div>
 
-                    {/* Today's Sessions */}
+                    {/* Today&apos;s Sessions */}
                     <div className="space-y-4">
-                      <h4 className="font-medium text-ink-hi">Today's Sessions ({employeeSessions.length})</h4>
+                      <h4 className="font-medium text-ink-hi">Today&apos;s Sessions ({employeeSessions.length})</h4>
                       <div className="space-y-3">
                         {employeeSessions.map((session) => (
                           <div key={session.id} className="bg-raised p-3 rounded-lg">

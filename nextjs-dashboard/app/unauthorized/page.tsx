@@ -25,7 +25,7 @@ export default function UnauthorizedPage() {
           <CardContent className="text-center">
             <div className="mb-6">
               <p className="text-slate-300 mb-4">
-                You don't have permission to access this resource.
+                You don&apos;t have permission to access this resource.
               </p>
               <p className="text-slate-400 text-sm">
                 Please contact your administrator if you believe this is an error.

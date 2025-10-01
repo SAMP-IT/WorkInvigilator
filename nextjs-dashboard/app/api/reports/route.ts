@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
     // Calculate date range based on period
     let startDate: Date
-    let endDate = new Date()
+    const endDate = new Date()
 
     switch (period) {
       case 'daily':
@@ -179,34 +179,36 @@ export async function GET(request: NextRequest) {
 
     // Add period-specific breakdowns
     if (period === 'daily' && sessions) {
-      (reportData as any).breakdowns = sessions.map(session => ({
+      const breakdowns = sessions.map(session => ({
         time: `${new Date(session.session_start_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}-${session.session_end_time ? new Date(session.session_end_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : 'Active'}`,
         activity: 'Work Session',
         focus: Math.round(((session.total_duration_seconds || 0) * 0.85 / (session.total_duration_seconds || 1)) * 100)
       }))
+      Object.assign(reportData, { breakdowns })
     }
 
     if (period === 'weekly') {
       // Group sessions by day
-      const dailyData = new Map()
+      const dailyData = new Map<string, { duration: number; focus: number; productivity: number }>()
       if (sessions && sessions.length > 0) {
         sessions.forEach(session => {
           const day = new Date(session.session_start_time).toLocaleDateString('en-US', { weekday: 'long' })
           if (!dailyData.has(day)) {
             dailyData.set(day, { duration: 0, focus: 0, productivity: 0 })
           }
-          const current = dailyData.get(day)
+          const current = dailyData.get(day)!
           current.duration += session.total_duration_seconds || 0
           current.focus += Math.floor((session.total_duration_seconds || 0) * 0.85)
         })
       }
 
-      (reportData as any).dailyBreakdown = Array.from(dailyData.entries()).map(([day, data]: [string, any]) => ({
+      const dailyBreakdown = Array.from(dailyData.entries()).map(([day, data]) => ({
         day,
         hours: formatTime(data.duration),
         focus: formatTime(data.focus),
         productivity: data.duration > 0 ? Number(((data.focus / data.duration) * 100).toFixed(1)) : 0
       }))
+      Object.assign(reportData, { dailyBreakdown })
     }
 
     return NextResponse.json({ report: reportData })

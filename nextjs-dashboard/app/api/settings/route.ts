@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
         lastLogin: new Date().toLocaleString('en-GB'),
         totalEmployees: totalEmployees || 0,
         activeEmployees: activeEmployees || 0,
-        avatar: (profile.name || profile.email).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+        avatar: (profile.name || profile.email).split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
       },
       organizationSettings: {
         name: 'WorkInvigilator Corp',

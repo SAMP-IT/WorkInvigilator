@@ -436,7 +436,7 @@ export default function ReportsPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {activeTab === 'daily' && 'breakdowns' in reportData && (
+                  {activeTab === 'daily' && 'breakdowns' in reportData && reportData.breakdowns && (
                     <div className="space-y-3">
                       {reportData.breakdowns.map((item, index) => (
                         <div key={index} className="flex items-center justify-between p-3 bg-raised rounded-lg">
@@ -457,7 +457,7 @@ export default function ReportsPage() {
                     </div>
                   )}
 
-                  {activeTab === 'weekly' && 'dailyBreakdown' in reportData && (
+                  {activeTab === 'weekly' && 'dailyBreakdown' in reportData && reportData.dailyBreakdown && (
                     <div className="space-y-3">
                       {reportData.dailyBreakdown.map((item, index) => (
                         <div key={index} className="flex items-center justify-between p-3 bg-raised rounded-lg">
@@ -481,7 +481,7 @@ export default function ReportsPage() {
                     </div>
                   )}
 
-                  {activeTab === 'monthly' && 'weeklyBreakdown' in reportData && (
+                  {activeTab === 'monthly' && 'weeklyBreakdown' in reportData && reportData.weeklyBreakdown && (
                     <div className="space-y-3">
                       {reportData.weeklyBreakdown.map((item, index) => (
                         <div key={index} className="flex items-center justify-between p-3 bg-raised rounded-lg">

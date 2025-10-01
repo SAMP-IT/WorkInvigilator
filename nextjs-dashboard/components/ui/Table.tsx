@@ -112,14 +112,14 @@ export function TableHead({
 }
 
 // Table Cell Component
-interface TableCellProps {
+interface TableCellProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
   children: ReactNode;
   className?: string;
 }
 
-export function TableCell({ children, className }: TableCellProps) {
+export function TableCell({ children, className, ...props }: TableCellProps) {
   return (
-    <td className={cn('px-4 py-3 font-ui text-sm text-ink-hi', className)}>
+    <td className={cn('px-4 py-3 font-ui text-sm text-ink-hi', className)} {...props}>
       {children}
     </td>
   );

@@ -10,7 +10,7 @@ interface AuthContextType {
   profile: Profile | null
   session: Session | null
   loading: boolean
-  signIn: (email: string, password: string) => Promise<{ error?: any }>
+  signIn: (email: string, password: string) => Promise<{ error?: Error }>
   signOut: () => Promise<void>
   isAdmin: boolean
 }

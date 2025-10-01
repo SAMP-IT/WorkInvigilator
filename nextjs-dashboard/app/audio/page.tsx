@@ -89,7 +89,7 @@ export default function AudioPage() {
 
         // Create user email mapping from the recordings data
         const emailMap: { [key: string]: string } = {};
-        data.recordings?.forEach((recording: any) => {
+        data.recordings?.forEach((recording: { user_id?: string; employeeName?: string }) => {
           if (recording.user_id && recording.employeeName) {
             emailMap[recording.user_id] = recording.employeeName;
           }
@@ -301,7 +301,7 @@ export default function AudioPage() {
                       <div className="mt-4 pl-4 border-l-2 border-primary/20">
                         <h4 className="text-sm font-medium text-ink-hi mb-3">Audio Chunks ({recording.session_info.chunks.length})</h4>
                         <div className="space-y-3">
-                          {recording.session_info.chunks.map((chunk: any, index: number) => (
+                          {recording.session_info.chunks.map((chunk: { id: string; chunk_number: number; duration_seconds: number; chunk_start_time: string; file_url: string; filename: string }) => (
                             <div key={chunk.id} className="p-3 bg-surface rounded-lg border border-line">
                               <div className="flex items-center justify-between">
                                 <div className="flex-1">

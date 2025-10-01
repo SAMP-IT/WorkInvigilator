@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Format audio recordings
-    const allAudioRecordings = []
+    const allAudioRecordings: Array<Record<string, unknown>> = []
 
     // Process recording chunks - group by session
     if (chunks && chunks.length > 0) {
@@ -84,19 +84,20 @@ export async function GET(request: NextRequest) {
         }
         acc[sessionKey].push(chunk)
         return acc
-      }, {} as Record<string, typeof chunks>)
+      }, {} as Record<string, Array<typeof chunks[number]>>)
 
       // Create entries for each session's chunks
       Object.entries(chunksGroupedBySession).forEach(([sessionStart, sessionChunks]) => {
-        const totalDuration = sessionChunks.reduce((sum, chunk) => sum + (chunk.duration_seconds * 1000 || 0), 0)
-        const firstChunk = sessionChunks[0]
+        const typedChunks = sessionChunks as Array<typeof chunks[number]>
+        const totalDuration = typedChunks.reduce((sum, chunk) => sum + (chunk.duration_seconds * 1000 || 0), 0)
+        const firstChunk = typedChunks[0]
 
         allAudioRecordings.push({
           id: `session-${sessionStart}`,
           type: 'chunked',
           user_id: firstChunk.user_id,
           employeeName: profile?.name || profile?.email || 'Unknown',
-          filename: `Session ${new Date(sessionStart).toLocaleDateString()} (${sessionChunks.length} chunks)`,
+          filename: `Session ${new Date(sessionStart).toLocaleDateString()} (${typedChunks.length} chunks)`,
           duration: totalDuration,
           durationFormatted: formatDuration(totalDuration),
           file_url: null, // Chunked recordings don't have single URL
@@ -111,8 +112,9 @@ export async function GET(request: NextRequest) {
           file_size: null,
           session_info: {
             session_start_time: sessionStart,
-            total_chunks: sessionChunks.length,
-            chunks: sessionChunks.map(chunk => ({
+            total_chunks: typedChunks.length,
+            total_duration_seconds: Math.floor(totalDuration / 1000),
+            chunks: typedChunks.map(chunk => ({
               id: chunk.id,
               chunk_number: chunk.chunk_number,
               filename: chunk.filename,
@@ -126,7 +128,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Sort all recordings by creation date (most recent first)
-    allAudioRecordings.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    allAudioRecordings.sort((a, b) => new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime())
 
     // Get total count for pagination
     const { count: totalChunks } = await supabaseAdmin

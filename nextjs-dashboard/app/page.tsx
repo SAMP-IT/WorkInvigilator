@@ -83,7 +83,7 @@ export default function HomePage() {
         setScreenshots(screenshots);
 
         // Create employees array from dashboard data for compatibility
-        const employeesFromDashboard = dashboardData.topPerformers?.map((performer: any) => ({
+        const employeesFromDashboard = dashboardData.topPerformers?.map((performer: { employeeId: string; name: string; email: string; productivity: number; breakHours?: number; workHours: number }) => ({
           id: performer.employeeId,
           name: performer.name,
           email: performer.email,

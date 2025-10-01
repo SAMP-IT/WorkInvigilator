@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 // Helper function to get applications for a session
-function getSessionApplications(session: any): string[] {
+function getSessionApplications(session: { total_duration_seconds?: number; session_start_time: string }): string[] {
   // For now, return categorized applications based on productivity
   const totalSeconds = session.total_duration_seconds || 0
   const focusSeconds = Math.floor(totalSeconds * 0.85) // Estimated focus time
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     const profileMap = (profiles || []).reduce((acc, profile) => {
       acc[profile.id] = profile
       return acc
-    }, {} as Record<string, any>)
+    }, {} as Record<string, { id: string; name: string; email: string }>)
 
     // Get productivity metrics and screenshots for each session
     const sessionsWithMetrics = await Promise.all(

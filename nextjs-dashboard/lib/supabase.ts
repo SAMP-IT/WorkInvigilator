@@ -23,11 +23,29 @@ export interface Recording {
   id: string
   user_id: string
   filename: string
-  file_url: string
+  file_url: string | null
   duration: number
-  file_size?: number
+  durationFormatted?: string
+  file_size?: number | null
   created_at: string
   session_id?: string
+  type?: string
+  employeeName?: string
+  timestamp?: string
+  totalDuration?: number
+  session_info?: {
+    session_start_time: string
+    total_chunks: number
+    total_duration_seconds: number
+    chunks: Array<{
+      id: string
+      chunk_number: number
+      duration_seconds: number
+      chunk_start_time: string
+      file_url: string
+      filename: string
+    }>
+  }
 }
 
 export interface Screenshot {
@@ -47,6 +65,6 @@ export interface Session {
   total_duration_seconds?: number
   total_chunks?: number
   total_chunk_duration_seconds?: number
-  chunk_files?: any
+  chunk_files?: { filename: string; file_url: string }[]
   created_at: string
 }

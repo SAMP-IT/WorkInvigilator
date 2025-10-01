@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
     const profileMap = (profiles || []).reduce((acc, profile) => {
       acc[profile.id] = profile
       return acc
-    }, {} as Record<string, any>)
+    }, {} as Record<string, { id: string; name: string; email: string }>)
 
     // Format break sessions for frontend
     const formattedBreakSessions = (breakSessions || []).map(session => {
