@@ -407,7 +407,7 @@ export default function EmployeesPage() {
                 <TableHead>Employee</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead sortable>Productivity %</TableHead>
+                <TableHead sortable>Productivity</TableHead>
                 <TableHead sortable>Avg Break</TableHead>
                 <TableHead sortable>Avg Session</TableHead>
                 <TableHead sortable>Last Active</TableHead>
