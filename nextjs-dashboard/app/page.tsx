@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { KpiTile } from "@/components/ui/KpiTile";
@@ -37,7 +37,7 @@ interface Screenshot {
   filename: string;
 }
 
-export default function HomePage() {
+function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { profile } = useAuth();
@@ -483,5 +483,28 @@ export default function HomePage() {
         )}
       </Modal>
     </DashboardLayout>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="font-ui text-2xl tracking-tightish font-semibold text-ink-hi">
+                Overview
+              </h1>
+              <p className="font-ui text-sm text-ink-muted">
+                Loading...
+              </p>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    }>
+      <HomePageContent />
+    </Suspense>
   );
 }

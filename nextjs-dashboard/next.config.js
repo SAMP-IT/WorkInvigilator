@@ -5,6 +5,7 @@ const nextConfig = {
     deviceSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     imageSizes: [16, 20, 24, 32, 48, 64, 96, 128],
     domains: [],
+    unoptimized: true, // Required for Cloudflare Pages
   },
   experimental: {
     optimizePackageImports: ['lucide-react'],

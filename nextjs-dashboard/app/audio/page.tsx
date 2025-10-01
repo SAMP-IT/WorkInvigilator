@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import type { Profile, Recording } from '@/lib/supabase';
 
-export default function AudioPage() {
+function AudioPageContent() {
   const searchParams = useSearchParams();
   const selectedEmployeeId = searchParams.get('employee');
   const { profile } = useAuth();
@@ -347,5 +347,24 @@ export default function AudioPage() {
 
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function AudioPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="font-ui text-2xl tracking-tightish font-semibold text-ink-hi">Audio Recordings</h1>
+              <p className="font-ui text-sm text-ink-muted">Loading...</p>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    }>
+      <AudioPageContent />
+    </Suspense>
   );
 }
