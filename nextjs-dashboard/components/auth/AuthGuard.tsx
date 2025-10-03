@@ -22,7 +22,6 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -83,7 +82,6 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
 
         const role = profile?.role || 'user'
         console.log('👤 User role:', role)
-        setUserRole(role)
 
         // Check if user has required role
         if (requiredRole && role !== requiredRole && role !== 'admin') {
