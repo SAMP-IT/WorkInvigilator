@@ -142,14 +142,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log(`👤 Loading profile for user ${userId} (attempt ${retryCount + 1})...`)
 
-      const { data: profile, error } = await withTimeout(
-        supabase
-          .from('profiles')
-          .select('*, organizations(id, name)')
-          .eq('id', userId)
-          .single(),
-        3000 // Faster timeout - 3 seconds
-      )
+      const profileResult = await supabase
+        .from('profiles')
+        .select('*, organizations(id, name)')
+        .eq('id', userId)
+        .single()
+
+      const { data: profile, error } = profileResult
 
       if (error) {
         console.error('❌ Error loading user profile:', error)
