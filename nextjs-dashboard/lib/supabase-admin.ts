@@ -1,51 +1,44 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-// Get admin Supabase client with proper initialization
+// Create admin client singleton
+let supabaseAdminInstance: SupabaseClient | null = null
+
 function getSupabaseAdminClient() {
+  if (supabaseAdminInstance) {
+    return supabaseAdminInstance
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!supabaseUrl || !supabaseServiceKey) {
+    console.error('❌ Supabase admin credentials missing!')
     throw new Error('Supabase admin environment variables are not configured')
   }
 
-  return createClient(supabaseUrl, supabaseServiceKey, {
+  console.log('🔧 Initializing Supabase Admin client...')
+
+  supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false
-    }
+    },
+    global: {
+      headers: {
+        'x-client-info': 'work-invigilator-admin',
+      },
+    },
   })
+
+  console.log('✅ Supabase Admin client initialized')
+  return supabaseAdminInstance
 }
 
-// Export a getter that creates the admin client lazily
-let cachedAdminClient: ReturnType<typeof getSupabaseAdminClient> | null = null
-
-export const supabaseAdmin = new Proxy({} as ReturnType<typeof getSupabaseAdminClient>, {
+// Create a proxy that lazily initializes on access
+export const supabaseAdmin = new Proxy({} as SupabaseClient, {
   get(target, prop) {
-    if (!cachedAdminClient) {
-      try {
-        cachedAdminClient = getSupabaseAdminClient()
-      } catch (error) {
-        console.warn('Supabase admin client not initialized:', error)
-        return undefined
-      }
-    }
-    return cachedAdminClient[prop as keyof ReturnType<typeof getSupabaseAdminClient>]
+    const client = getSupabaseAdminClient()
+    const value = (client as any)[prop]
+    return typeof value === 'function' ? value.bind(client) : value
   }
 })
-
-// For backwards compatibility, also export with direct values if env vars not available
-export const createAdminClient = () => {
-  const url = "https://qqnmilkgltcooqzytkxy.supabase.co"
-  // We'll need the service role key from environment or hardcode temporarily
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    // This would need to be the actual service role key from Supabase dashboard
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxbm1pbGtnbHRjb29xenl0a3h5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODYwNjM4NywiZXhwIjoyMDc0MTgyMzg3fQ.SERVICE_ROLE_KEY_PLACEHOLDER"
-
-  return createClient(url, serviceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  })
-}

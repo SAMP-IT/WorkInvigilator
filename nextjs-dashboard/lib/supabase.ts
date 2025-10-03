@@ -1,33 +1,47 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-// Get Supabase client with proper initialization
+// Create client singleton - will be initialized on first access
+let supabaseInstance: SupabaseClient | null = null
+
 function getSupabaseClient() {
+  if (supabaseInstance) {
+    return supabaseInstance
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    // During build time or if env vars are missing, throw an error that will be caught
+    console.error('❌ Supabase credentials missing!')
     throw new Error('Supabase environment variables are not configured')
   }
 
-  return createClient(supabaseUrl, supabaseAnonKey)
+  console.log('🔧 Initializing Supabase client...')
+
+  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storageKey: 'work-invigilator-auth',
+    },
+    global: {
+      headers: {
+        'x-client-info': 'work-invigilator-dashboard',
+      },
+    },
+  })
+
+  console.log('✅ Supabase client initialized')
+  return supabaseInstance
 }
 
-// Export a getter that creates the client lazily
-let cachedClient: ReturnType<typeof getSupabaseClient> | null = null
-
-export const supabase = new Proxy({} as ReturnType<typeof getSupabaseClient>, {
+// Create a proxy that lazily initializes on access
+export const supabase = new Proxy({} as SupabaseClient, {
   get(target, prop) {
-    if (!cachedClient) {
-      try {
-        cachedClient = getSupabaseClient()
-      } catch (error) {
-        // During build time, return a mock that won't be actually called
-        console.warn('Supabase client not initialized:', error)
-        return undefined
-      }
-    }
-    return cachedClient[prop as keyof ReturnType<typeof getSupabaseClient>]
+    const client = getSupabaseClient()
+    const value = (client as any)[prop]
+    return typeof value === 'function' ? value.bind(client) : value
   }
 })
 

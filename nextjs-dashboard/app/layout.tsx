@@ -31,7 +31,7 @@ export default function RootLayout({
         {/* Numeric/mono */}
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300..800&display=swap" rel="stylesheet" />
       </head>
-      <body className={`${inter.variable} font-ui antialiased`}>
+      <body className={`${inter.variable} font-ui antialiased`} suppressHydrationWarning>
         <AuthProvider>
           {children}
         </AuthProvider>

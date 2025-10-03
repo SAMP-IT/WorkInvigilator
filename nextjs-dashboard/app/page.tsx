@@ -51,12 +51,19 @@ function HomePageContent() {
 
   useEffect(() => {
     if (profile?.organization_id) {
+      console.log('📊 Profile loaded, starting data fetch...');
       loadData();
+    } else {
+      console.log('⏳ Waiting for profile...');
     }
-  }, [profile, searchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.organization_id, searchParams?.get('period')]);
 
   async function loadData() {
     setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
     try {
       console.log('🔄 Starting to load dashboard data...');
 
@@ -70,7 +77,16 @@ function HomePageContent() {
       const period = searchParams?.get('period') || 'today';
 
       // Load dashboard metrics filtered by organization
-      const dashboardResponse = await fetch(`/api/dashboard?period=${period}&organizationId=${profile.organization_id}`);
+      console.log('📡 Fetching dashboard data from API...');
+      const dashboardResponse = await fetch(
+        `/api/dashboard?period=${period}&organizationId=${profile.organization_id}`,
+        {
+          signal: controller.signal,
+          cache: 'no-store'
+        }
+      );
+
+      clearTimeout(timeoutId);
       console.log('📡 Dashboard API response status:', dashboardResponse.status);
 
       if (dashboardResponse.ok) {
@@ -99,41 +115,75 @@ function HomePageContent() {
         console.error('❌ Failed to load dashboard data:', dashboardResponse.status);
 
         // Fallback to individual API calls
-        await loadDataFallback();
+        await loadDataFallback(controller.signal);
       }
     } catch (error) {
-      console.error("❌ Error loading dashboard data:", error);
-      // Fallback to individual API calls
-      await loadDataFallback();
+      clearTimeout(timeoutId);
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('⏱️ Dashboard data fetch timeout');
+        // Try fallback on timeout
+        await loadDataFallback();
+      } else {
+        console.error("❌ Error loading dashboard data:", error);
+        // Fallback to individual API calls
+        await loadDataFallback();
+      }
     } finally {
       console.log('✅ Loading complete, setting loading to false');
       setLoading(false);
     }
   }
 
-  async function loadDataFallback() {
+  async function loadDataFallback(signal?: AbortSignal) {
     try {
-      // Load employees with metrics (fallback)
-      const employeesResponse = await fetch('/api/employees');
-      if (employeesResponse.ok) {
-        const employeesData = await employeesResponse.json();
-        console.log('Employees loaded (fallback):', employeesData); // Debug log
-        setEmployees(employeesData.employees || []);
+      console.log('🔄 Using fallback data loading...');
+
+      // Create timeout controllers for fallback requests
+      const employeesController = new AbortController();
+      const screenshotsController = new AbortController();
+
+      const employeesTimeout = setTimeout(() => employeesController.abort(), 5000);
+      const screenshotsTimeout = setTimeout(() => screenshotsController.abort(), 5000);
+
+      // Load both in parallel with timeouts
+      const [employeesResult, screenshotsResult] = await Promise.allSettled([
+        fetch('/api/employees', {
+          signal: signal || employeesController.signal,
+          cache: 'no-store'
+        }).then(res => res.ok ? res.json() : null),
+
+        fetch('/api/screenshots?limit=4', {
+          signal: signal || screenshotsController.signal,
+          cache: 'no-store'
+        }).then(res => res.ok ? res.json() : null)
+      ]);
+
+      clearTimeout(employeesTimeout);
+      clearTimeout(screenshotsTimeout);
+
+      // Handle employees result
+      if (employeesResult.status === 'fulfilled' && employeesResult.value) {
+        console.log('✅ Employees loaded (fallback):', employeesResult.value.employees?.length || 0);
+        setEmployees(employeesResult.value.employees || []);
       } else {
-        console.error('Failed to load employees:', employeesResponse.status);
+        console.error('❌ Failed to load employees (fallback)');
+        setEmployees([]);
       }
 
-      // Load recent screenshots (fallback)
-      const screenshotsResponse = await fetch('/api/screenshots?limit=4');
-      if (screenshotsResponse.ok) {
-        const screenshotsData = await screenshotsResponse.json();
-        console.log('Screenshots loaded (fallback):', screenshotsData); // Debug log
-        setScreenshots(screenshotsData.screenshots || []);
+      // Handle screenshots result
+      if (screenshotsResult.status === 'fulfilled' && screenshotsResult.value) {
+        console.log('✅ Screenshots loaded (fallback):', screenshotsResult.value.screenshots?.length || 0);
+        setScreenshots(screenshotsResult.value.screenshots || []);
       } else {
-        console.error('Failed to load screenshots:', screenshotsResponse.status);
+        console.error('❌ Failed to load screenshots (fallback)');
+        setScreenshots([]);
       }
     } catch (error) {
-      console.error("Error in fallback data loading:", error);
+      console.error("❌ Error in fallback data loading:", error);
+      // Set empty arrays to prevent infinite loading
+      setEmployees([]);
+      setScreenshots([]);
     }
   }
 
