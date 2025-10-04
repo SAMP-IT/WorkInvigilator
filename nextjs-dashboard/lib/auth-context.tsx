@@ -53,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Set a maximum time for initialization - MUST finish within 3 seconds
     const initTimeout = setTimeout(() => {
       if (mounted) {
+        console.log('[AuthContext] Init timeout reached')
         setLoading(false)
       }
     }, 3000) // 3 second max - faster timeout
@@ -60,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Get initial session with timeout
     const initializeAuth = async () => {
       try {
+        console.log('[AuthContext] Initializing auth, getting session...')
         // Quick session check - fail fast
         const { data: { session }, error } = await withTimeout(
           supabase.auth.getSession(),
@@ -69,15 +71,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!mounted) return
 
         if (error) {
+          console.log('[AuthContext] Session error:', error.message)
           setLoading(false)
           clearTimeout(initTimeout)
           return
         }
 
+        console.log('[AuthContext] Session retrieved:', session ? 'User logged in' : 'No session')
         setSession(session)
         setUser(session?.user ?? null)
 
         if (session?.user) {
+          console.log('[AuthContext] Loading user profile for:', session.user.id)
           // Load profile but don't block - allow UI to render
           loadUserProfile(session.user.id).finally(() => {
             if (mounted) {
@@ -89,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           clearTimeout(initTimeout)
         }
       } catch (error) {
+        console.error('[AuthContext] Init error:', error)
         if (mounted) {
           setLoading(false)
           clearTimeout(initTimeout)
@@ -102,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[AuthContext] Auth state changed:', event, session ? 'User logged in' : 'No session')
       if (!mounted) return
 
       setSession(session)
@@ -196,6 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signIn(email: string, password: string) {
+    console.log('[AuthContext] Sign in called for:', email)
     setLoading(true)
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -203,10 +211,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     if (error) {
+      console.log('[AuthContext] Sign in failed:', error.message)
       setLoading(false)
       return { error }
     }
 
+    console.log('[AuthContext] Sign in successful, waiting for auth state change')
     // Don't set loading false here - let the auth state change handler do it
     // after the profile is loaded
     return { data }
