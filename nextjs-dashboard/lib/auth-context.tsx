@@ -202,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } else if (retryCount < MAX_RETRIES && error.message.includes('timeout')) {
           // Retry on timeout
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
+          await new Promise(resolve => setTimeout(resolve, 500))
           return loadUserProfile(userId, retryCount + 1)
         } else {
           console.log('[AuthContext] Profile error (non-retryable):', error.message)
