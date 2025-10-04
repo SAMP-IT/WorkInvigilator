@@ -40,8 +40,15 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     const checkAuth = async () => {
       try {
         console.log('[AuthGuard] Checking authentication...')
-        // Don't wrap getSession in timeout - Supabase handles this internally
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+        // Wrap getSession with timeout since it can hang
+        const sessionPromise = supabase.auth.getSession()
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('getSession timeout')), 2000)
+        )
+
+        const result = await Promise.race([sessionPromise, timeoutPromise]) as any
+        const { data: { session }, error: sessionError } = result
 
         if (!mounted) return
 
