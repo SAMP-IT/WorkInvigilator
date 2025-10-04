@@ -2,139 +2,39 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 
 interface AuthGuardProps {
   children: React.ReactNode;
   requiredRole?: 'admin' | 'user';
 }
 
-// Timeout helper
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
-    ),
-  ])
-}
-
 export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { user, profile, loading } = useAuth();
   const router = useRouter();
+  const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    let mounted = true
-
-    // Set maximum timeout for auth check - MUST finish quickly
-    const authTimeout = setTimeout(() => {
-      if (mounted) {
-        console.log('[AuthGuard] Auth check timed out')
-        setError('Authentication check timed out. Please refresh the page.')
-        setIsLoading(false)
+    if (!loading) {
+      if (!user) {
+        router.push('/login');
+        return;
       }
-    }, 3000) // 3 second max - fail fast
 
-    const checkAuth = async () => {
-      try {
-        console.log('[AuthGuard] Checking authentication...')
-
-        // Wrap getSession with timeout since it can hang
-        const sessionPromise = supabase.auth.getSession()
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('getSession timeout')), 2000)
-        )
-
-        const result = await Promise.race([sessionPromise, timeoutPromise]) as any
-        const { data: { session }, error: sessionError } = result
-
-        if (!mounted) return
-
-        if (sessionError) {
-          throw sessionError
-        }
-
-        if (!session) {
-          console.log('[AuthGuard] No session found, redirecting to login')
-          clearTimeout(authTimeout)
-          if (mounted) {
-            // Use window.location for reliable redirect
-            window.location.href = '/login'
-          }
-          return
-        }
-
-        console.log('[AuthGuard] Session found for user:', session.user.id)
-
-        // Get user profile to check role with timeout
-        console.log('[AuthGuard] Fetching user profile...')
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single()
-
-        if (!mounted) return
-
-        const role = profile?.role || 'user'
-        console.log('[AuthGuard] User role:', role)
-
-        // Check if user has required role
-        if (requiredRole && role !== requiredRole && role !== 'admin') {
-          console.log('[AuthGuard] User does not have required role, redirecting to unauthorized')
-          clearTimeout(authTimeout)
-          if (mounted) {
-            window.location.href = '/unauthorized'
-          }
-          return
-        }
-
-        console.log('[AuthGuard] Authentication successful')
-        setIsAuthenticated(true)
-        clearTimeout(authTimeout)
-      } catch (error) {
-        console.error('[AuthGuard] Auth check error:', error)
-        clearTimeout(authTimeout)
-
-        if (!mounted) return
-
-        // Check if it's a timeout error
-        if (error instanceof Error && error.message.includes('timeout')) {
-          setError('Authentication timed out. Please refresh the page.')
-          // Don't redirect on timeout, allow retry
-        } else {
-          console.log('[AuthGuard] Error occurred, redirecting to login')
-          window.location.href = '/login'
-        }
-      } finally {
-        if (mounted) {
-          setIsLoading(false)
+      // Check role requirements
+      if (requiredRole && profile) {
+        const userRole = profile.role || 'user';
+        if (userRole !== requiredRole && userRole !== 'admin') {
+          router.push('/unauthorized');
+          return;
         }
       }
+
+      setIsChecking(false);
     }
+  }, [user, profile, loading, requiredRole, router]);
 
-    checkAuth()
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[AuthGuard] Auth state changed:', event)
-      if (!mounted) return
-      if (event === 'SIGNED_OUT' || !session) {
-        console.log('[AuthGuard] User signed out, redirecting to login')
-        window.location.href = '/login'
-      }
-    })
-
-    return () => {
-      mounted = false
-      clearTimeout(authTimeout)
-      subscription.unsubscribe()
-    }
-  }, [router, requiredRole])
-
-  if (isLoading) {
+  if (loading || isChecking) {
     return (
       <div className="min-h-screen bg-base flex items-center justify-center">
         <div className="text-center">
@@ -148,62 +48,13 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
             </div>
           </div>
           <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto"></div>
-          {error && (
-            <div className="mt-4 text-red-400 text-sm">
-              {error}
-              <button
-                onClick={() => window.location.reload()}
-                className="ml-2 underline hover:text-red-300"
-              >
-                Retry
-              </button>
-            </div>
-          )}
         </div>
       </div>
     );
   }
 
-  if (error && !isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-base flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="inline-flex items-center space-x-3 mb-4">
-            <div className="w-12 h-12 bg-red-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">!</span>
-            </div>
-          </div>
-          <h2 className="text-xl font-bold text-ink-hi mb-2">Authentication Error</h2>
-          <p className="text-ink-muted mb-4">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/80"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    // Show loading during redirect instead of null (blank screen)
-    return (
-      <div className="min-h-screen bg-base flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-flex items-center space-x-3 mb-4">
-            <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">W</span>
-            </div>
-            <div className="text-left">
-              <h1 className="text-2xl font-bold text-ink-hi">Work Invigilator</h1>
-              <p className="text-ink-muted text-sm">Redirecting to login...</p>
-            </div>
-          </div>
-          <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto"></div>
-        </div>
-      </div>
-    );
+  if (!user) {
+    return null;
   }
 
   return <>{children}</>;

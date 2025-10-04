@@ -11,35 +11,12 @@ interface AuthContextType {
   session: Session | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error?: Error }>
+  signUp: (email: string, password: string) => Promise<{ error?: Error }>
   signOut: () => Promise<void>
   isAdmin: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-// Timeout helper with better error handling
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage = 'Request timeout'): Promise<T> {
-  let timeoutHandle: NodeJS.Timeout
-
-  const timeoutPromise = new Promise<T>((_, reject) => {
-    timeoutHandle = setTimeout(() => {
-      const error = new Error(errorMessage)
-      error.name = 'TimeoutError'
-      reject(error)
-    }, timeoutMs)
-  })
-
-  return Promise.race([
-    promise.then((result) => {
-      clearTimeout(timeoutHandle)
-      return result
-    }).catch((error) => {
-      clearTimeout(timeoutHandle)
-      throw error
-    }),
-    timeoutPromise
-  ])
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -50,23 +27,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true
 
-    // Set a maximum time for initialization - MUST finish within 5 seconds
-    const initTimeout = setTimeout(() => {
+    // Timeout to ensure loading state doesn't hang forever
+    const timeout = setTimeout(() => {
       if (mounted) {
-        console.log('[AuthContext] Init timeout reached - forcing loading to false')
+        console.warn('[Auth] Initialization timeout - setting loading to false')
         setLoading(false)
       }
-    }, 5000) // 5 second max to allow profile query time
+    }, 5000) // 5 second timeout
 
-    // Get initial session with timeout
+    // Get initial session
     const initializeAuth = async () => {
       try {
-        console.log('[AuthContext] Initializing auth, getting session...')
+        console.log('[Auth] Initializing...')
 
-        // Wrap getSession with timeout since it can hang
+        // Add timeout wrapper for getSession
         const sessionPromise = supabase.auth.getSession()
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('getSession timeout')), 4000)
+          setTimeout(() => reject(new Error('getSession timeout')), 3000)
         )
 
         const result = await Promise.race([sessionPromise, timeoutPromise]) as any
@@ -74,40 +51,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (!mounted) return
 
+        clearTimeout(timeout)
+
         if (error) {
-          console.log('[AuthContext] Session error:', error.message)
+          console.error('[Auth] Session error:', error)
           setLoading(false)
-          clearTimeout(initTimeout)
           return
         }
 
-        console.log('[AuthContext] Session retrieved:', session ? 'User logged in' : 'No session')
+        console.log('[Auth] Session:', session ? 'Found' : 'None')
         setSession(session)
         setUser(session?.user ?? null)
 
         if (session?.user) {
-          console.log('[AuthContext] Loading user profile for:', session.user.id)
-          // Load profile but don't block - allow UI to render
-          loadUserProfile(session.user.id).finally(() => {
-            if (mounted) {
-              clearTimeout(initTimeout)
-            }
-          })
+          console.log('[Auth] Loading profile for user:', session.user.id)
+          await loadUserProfile(session.user.id)
         } else {
+          console.log('[Auth] No session, setting loading to false')
           setLoading(false)
-          clearTimeout(initTimeout)
         }
       } catch (error) {
-        console.error('[AuthContext] Init error:', error)
+        console.error('[Auth] Init error:', error)
         if (mounted) {
-          // If getSession times out, assume no session and continue
-          if (error instanceof Error && error.message === 'getSession timeout') {
-            console.log('[AuthContext] getSession timed out - assuming no session')
-            setSession(null)
-            setUser(null)
-          }
+          clearTimeout(timeout)
           setLoading(false)
-          clearTimeout(initTimeout)
         }
       }
     }
@@ -115,10 +82,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initializeAuth()
 
     // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[AuthContext] Auth state changed:', event, session ? 'User logged in' : 'No session')
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[Auth] State change:', event, session ? 'Has session' : 'No session')
       if (!mounted) return
 
       setSession(session)
@@ -134,142 +99,83 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false
-      clearTimeout(initTimeout)
+      clearTimeout(timeout)
       subscription.unsubscribe()
     }
   }, [])
 
-  async function loadUserProfile(userId: string, retryCount = 0) {
-    const MAX_RETRIES = 0 // No retries - fail fast
-    const PROFILE_TIMEOUT = 3000 // 3 second timeout for profile query
-
+  async function loadUserProfile(userId: string) {
     try {
-      console.log('[AuthContext] Loading profile for user:', userId, 'Retry:', retryCount)
+      console.log('[Auth] Fetching profile for:', userId)
 
-      // Create a timeout promise
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Profile query timeout')), PROFILE_TIMEOUT)
-      })
+      // Use fetch API instead of Supabase client for more control
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-      // Race the profile query against the timeout
-      const profileResult = await Promise.race([
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single(),
-        timeoutPromise
-      ]) as { data: any; error: any }
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error('Supabase config missing')
+      }
 
-      const { data: profile, error } = profileResult
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000)
 
-      if (error) {
-        console.log('[AuthContext] Profile load error:', error.message, error.code)
-        // If profile doesn't exist, create a default one for this user
-        if (error.code === 'PGRST116') { // No rows returned
-          try {
-            const { data: user } = await supabase.auth.getUser()
-
-            if (user.user) {
-              // Get or create default organization
-              const { data: defaultOrg } = await supabase
-                .from('organizations')
-                .select('id')
-                .eq('name', 'Default Organization')
-                .single()
-
-              const { data: newProfile, error: createError } = await supabase
-                .from('profiles')
-                .insert([{
-                  id: userId,
-                  email: user.user.email,
-                  role: 'admin', // Default to admin for manual signups
-                  organization_id: defaultOrg?.id || null
-                }])
-                .select('*')
-                .single()
-
-              if (createError) {
-                console.log('[AuthContext] Failed to create profile:', createError.message)
-                setProfile(null)
-              } else {
-                console.log('[AuthContext] Created new profile:', newProfile)
-                setProfile(newProfile)
-              }
-            }
-          } catch (createError) {
-            setProfile(null)
+      try {
+        const response = await fetch(
+          `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=*`,
+          {
+            headers: {
+              'apikey': supabaseKey,
+              'Authorization': `Bearer ${supabaseKey}`,
+              'Content-Type': 'application/json',
+            },
+            signal: controller.signal,
           }
-        } else if (retryCount < MAX_RETRIES && error.message.includes('timeout')) {
-          // Retry on timeout
-          await new Promise(resolve => setTimeout(resolve, 500))
-          return loadUserProfile(userId, retryCount + 1)
-        } else {
-          console.log('[AuthContext] Profile error (non-retryable):', error.message)
-          setProfile(null)
+        )
+
+        clearTimeout(timeoutId)
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
         }
-      } else {
-        console.log('[AuthContext] Profile loaded successfully:', profile)
-        setProfile(profile)
+
+        const data = await response.json()
+
+        if (data && data.length > 0) {
+          console.log('[Auth] Profile loaded:', data[0])
+          setProfile(data[0])
+        } else {
+          console.log('[Auth] No profile found, using fallback')
+          setProfile({
+            id: userId,
+            email: '',
+            role: 'user',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            organization_id: null,
+          } as Profile)
+        }
+      } catch (fetchError) {
+        clearTimeout(timeoutId)
+        throw fetchError
       }
     } catch (error) {
-      console.error('[AuthContext] Unexpected error loading profile:', error)
-
-      if (error instanceof Error && error.message === 'Profile query timeout') {
-        console.log('[AuthContext] Profile query timed out - trying REST API fallback')
-
-        // Fallback: Try direct REST API call
-        try {
-          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-          const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-          if (!supabaseUrl || !supabaseKey) {
-            throw new Error('Supabase config missing')
-          }
-
-          const response = await fetch(
-            `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=*`,
-            {
-              headers: {
-                'apikey': supabaseKey,
-                'Authorization': `Bearer ${supabaseKey}`,
-              },
-              signal: AbortSignal.timeout(2000) // 2 second timeout
-            }
-          )
-
-          if (response.ok) {
-            const data = await response.json()
-            if (data && data.length > 0) {
-              console.log('[AuthContext] Profile loaded via REST API fallback:', data[0])
-              setProfile(data[0])
-              setLoading(false)
-              return
-            }
-          }
-        } catch (fallbackError) {
-          console.error('[AuthContext] REST API fallback also failed:', fallbackError)
-        }
-
-        // If all fails, set minimal profile
-        console.log('[AuthContext] All profile loading attempts failed - proceeding with minimal profile')
-        setProfile({
-          id: userId,
-          email: '',
-          role: 'user',
-          organization_id: null
-        } as any)
-      } else {
-        setProfile(null)
-      }
+      console.error('[Auth] Error loading profile:', error)
+      // Set a fallback profile so the app doesn't hang
+      setProfile({
+        id: userId,
+        email: '',
+        role: 'user',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        organization_id: null,
+      } as Profile)
     } finally {
-      console.log('[AuthContext] Profile loading complete, setting loading to false')
+      console.log('[Auth] Setting loading to false')
       setLoading(false)
     }
   }
 
   async function signIn(email: string, password: string) {
-    console.log('[AuthContext] Sign in called for:', email)
     setLoading(true)
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -277,14 +183,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     if (error) {
-      console.log('[AuthContext] Sign in failed:', error.message)
       setLoading(false)
       return { error }
     }
 
-    console.log('[AuthContext] Sign in successful, waiting for auth state change')
-    // Don't set loading false here - let the auth state change handler do it
-    // after the profile is loaded
+    return { data }
+  }
+
+  async function signUp(email: string, password: string) {
+    setLoading(true)
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    })
+
+    if (error) {
+      setLoading(false)
+      return { error }
+    }
+
     return { data }
   }
 
@@ -303,6 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
     loading,
     signIn,
+    signUp,
     signOut,
     isAdmin: profile?.role === 'admin'
   }

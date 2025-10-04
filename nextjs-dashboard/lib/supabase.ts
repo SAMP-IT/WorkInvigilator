@@ -1,52 +1,25 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-// Create client singleton - will be initialized on first access
-let supabaseInstance: SupabaseClient | null = null
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-function getSupabaseClient() {
-  if (supabaseInstance) {
-    return supabaseInstance
-  }
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Supabase environment variables are not configured')
-  }
-
-  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      storageKey: 'work-invigilator-auth',
-    },
-    global: {
-      headers: {
-        'x-client-info': 'work-invigilator-dashboard',
-      },
-    },
-    db: {
-      schema: 'public',
-    },
-    // Optimize for Vercel deployment
-    realtime: {
-      timeout: 5000,
-    },
-  })
-
-  return supabaseInstance
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Missing Supabase environment variables')
 }
 
-// Create a proxy that lazily initializes on access
-export const supabase = new Proxy({} as SupabaseClient, {
-  get(target, prop) {
-    const client = getSupabaseClient()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const value = (client as any)[prop]
-    return typeof value === 'function' ? value.bind(client) : value
-  }
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: typeof window !== 'undefined',
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storageKey: 'work-invigilator-auth',
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+  },
+  global: {
+    headers: {
+      'x-client-info': 'work-invigilator-dashboard',
+    },
+  },
 })
 
 // Database types (can be generated from Supabase CLI)

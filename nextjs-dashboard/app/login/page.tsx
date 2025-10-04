@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 
@@ -9,8 +9,26 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { signIn } = useAuth()
+  const { signIn, user, loading: authLoading } = useAuth()
   const router = useRouter()
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace('/')
+    }
+  }, [user, authLoading, router])
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto"></div>
+        </div>
+      </div>
+    )
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -24,11 +42,9 @@ export default function LoginPage() {
     setError('')
 
     try {
-      console.log('[Login] Attempting sign in for:', email)
       const { error } = await signIn(email, password)
 
       if (error) {
-        console.log('[Login] Sign in error:', error.message)
         if (error.message.includes('Invalid login credentials')) {
           setError('Invalid email or password')
         } else if (error.message.includes('Email not confirmed')) {
@@ -38,13 +54,8 @@ export default function LoginPage() {
         }
         setLoading(false)
       } else {
-        console.log('[Login] Sign in successful, redirecting to home page in 500ms')
-        // Keep loading state true during redirect
-        // Add a small delay to ensure auth state is propagated
-        setTimeout(() => {
-          console.log('[Login] Executing redirect now')
-          window.location.href = '/'
-        }, 500)
+        // Redirect immediately after successful login
+        router.push('/')
       }
     } catch (err) {
       console.error('[Login] Unexpected error:', err)
