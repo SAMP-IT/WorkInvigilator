@@ -31,6 +31,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     // Set maximum timeout for auth check - MUST finish quickly
     const authTimeout = setTimeout(() => {
       if (mounted) {
+        console.log('[AuthGuard] Auth check timed out')
         setError('Authentication check timed out. Please refresh the page.')
         setIsLoading(false)
       }
@@ -38,6 +39,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
 
     const checkAuth = async () => {
       try {
+        console.log('[AuthGuard] Checking authentication...')
         const { data: { session }, error: sessionError } = await withTimeout(
           supabase.auth.getSession(),
           2000 // 2 second timeout
@@ -50,6 +52,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
         }
 
         if (!session) {
+          console.log('[AuthGuard] No session found, redirecting to login')
           clearTimeout(authTimeout)
           if (mounted) {
             // Use window.location for reliable redirect
@@ -58,7 +61,10 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
           return
         }
 
+        console.log('[AuthGuard] Session found for user:', session.user.id)
+
         // Get user profile to check role with timeout
+        console.log('[AuthGuard] Fetching user profile...')
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('role')
@@ -68,9 +74,11 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
         if (!mounted) return
 
         const role = profile?.role || 'user'
+        console.log('[AuthGuard] User role:', role)
 
         // Check if user has required role
         if (requiredRole && role !== requiredRole && role !== 'admin') {
+          console.log('[AuthGuard] User does not have required role, redirecting to unauthorized')
           clearTimeout(authTimeout)
           if (mounted) {
             window.location.href = '/unauthorized'
@@ -78,9 +86,11 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
           return
         }
 
+        console.log('[AuthGuard] Authentication successful')
         setIsAuthenticated(true)
         clearTimeout(authTimeout)
       } catch (error) {
+        console.error('[AuthGuard] Auth check error:', error)
         clearTimeout(authTimeout)
 
         if (!mounted) return
@@ -90,6 +100,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
           setError('Authentication timed out. Please refresh the page.')
           // Don't redirect on timeout, allow retry
         } else {
+          console.log('[AuthGuard] Error occurred, redirecting to login')
           window.location.href = '/login'
         }
       } finally {
@@ -103,8 +114,10 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[AuthGuard] Auth state changed:', event)
       if (!mounted) return
       if (event === 'SIGNED_OUT' || !session) {
+        console.log('[AuthGuard] User signed out, redirecting to login')
         window.location.href = '/login'
       }
     })

@@ -24,9 +24,11 @@ export default function LoginPage() {
     setError('')
 
     try {
+      console.log('[Login] Attempting sign in for:', email)
       const { error } = await signIn(email, password)
 
       if (error) {
+        console.log('[Login] Sign in error:', error.message)
         if (error.message.includes('Invalid login credentials')) {
           setError('Invalid email or password')
         } else if (error.message.includes('Email not confirmed')) {
@@ -35,10 +37,12 @@ export default function LoginPage() {
           setError(error.message)
         }
       } else {
+        console.log('[Login] Sign in successful, redirecting to home page')
         // Force a hard redirect to clear any cached state
         window.location.href = '/'
       }
     } catch (err) {
+      console.error('[Login] Unexpected error:', err)
       setError('An unexpected error occurred')
     } finally {
       setLoading(false)
