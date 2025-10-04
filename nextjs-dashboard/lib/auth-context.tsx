@@ -132,9 +132,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       console.log('[AuthContext] Loading profile for user:', userId, 'Retry:', retryCount)
+
+      // Simplified query without join to prevent hanging on Vercel
       const profileResult = await supabase
         .from('profiles')
-        .select('*, organizations(id, name)')
+        .select('*')
         .eq('id', userId)
         .single()
 
@@ -163,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   role: 'admin', // Default to admin for manual signups
                   organization_id: defaultOrg?.id || null
                 }])
-                .select('*, organizations(id, name)')
+                .select('*')
                 .single()
 
               if (createError) {
