@@ -95,10 +95,8 @@ export default function EmployeesPage() {
       }
 
       const data = await response.json();
-      console.log("Employees page - loaded data:", data); // Debug log
       setEmployees(data.employees || []);
     } catch (err) {
-      console.error("Error loading employees:", err);
       setError("Failed to load employees. Please try again.");
     } finally {
       setLoading(false);
@@ -177,7 +175,6 @@ export default function EmployeesPage() {
       }
 
       const data = await response.json();
-      console.log("Employee created:", data);
 
       // Show success message
       setSuccessMessage(`Employee ${formData.name} created successfully!`);
@@ -187,7 +184,6 @@ export default function EmployeesPage() {
       setShowAddModal(false);
       await loadEmployees();
     } catch (error) {
-      console.error("Error creating employee:", error);
       setError(
         error instanceof Error ? error.message : "Failed to create employee"
       );

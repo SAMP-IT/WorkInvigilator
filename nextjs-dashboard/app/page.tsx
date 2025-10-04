@@ -51,10 +51,7 @@ function HomePageContent() {
 
   useEffect(() => {
     if (profile?.organization_id) {
-      console.log('📊 Profile loaded, starting data fetch...');
       loadData();
-    } else {
-      console.log('⏳ Waiting for profile...');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.organization_id, searchParams?.get('period')]);
@@ -65,10 +62,7 @@ function HomePageContent() {
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
     try {
-      console.log('🔄 Starting to load dashboard data...');
-
       if (!profile?.organization_id) {
-        console.error('No organization ID found');
         setLoading(false);
         return;
       }
@@ -77,7 +71,6 @@ function HomePageContent() {
       const period = searchParams?.get('period') || 'today';
 
       // Load dashboard metrics filtered by organization
-      console.log('📡 Fetching dashboard data from API...');
       const dashboardResponse = await fetch(
         `/api/dashboard?period=${period}&organizationId=${profile.organization_id}`,
         {
@@ -87,15 +80,12 @@ function HomePageContent() {
       );
 
       clearTimeout(timeoutId);
-      console.log('📡 Dashboard API response status:', dashboardResponse.status);
 
       if (dashboardResponse.ok) {
         const dashboardData = await dashboardResponse.json();
-        console.log('✅ Dashboard data loaded:', dashboardData);
 
         // Set screenshots from dashboard data
         const screenshots = dashboardData.recentScreenshots || [];
-        console.log('📸 Setting screenshots:', screenshots.length);
         setScreenshots(screenshots);
 
         // Create employees array from dashboard data for compatibility
@@ -109,11 +99,8 @@ function HomePageContent() {
           status: 'offline' as const // Will be updated by separate call if needed
         })) || [];
 
-        console.log('👥 Setting employees:', employeesFromDashboard.length);
         setEmployees(employeesFromDashboard);
       } else {
-        console.error('❌ Failed to load dashboard data:', dashboardResponse.status);
-
         // Fallback to individual API calls
         await loadDataFallback(controller.signal);
       }
@@ -121,24 +108,19 @@ function HomePageContent() {
       clearTimeout(timeoutId);
 
       if (error instanceof Error && error.name === 'AbortError') {
-        console.error('⏱️ Dashboard data fetch timeout');
         // Try fallback on timeout
         await loadDataFallback();
       } else {
-        console.error("❌ Error loading dashboard data:", error);
         // Fallback to individual API calls
         await loadDataFallback();
       }
     } finally {
-      console.log('✅ Loading complete, setting loading to false');
       setLoading(false);
     }
   }
 
   async function loadDataFallback(signal?: AbortSignal) {
     try {
-      console.log('🔄 Using fallback data loading...');
-
       // Create timeout controllers for fallback requests
       const employeesController = new AbortController();
       const screenshotsController = new AbortController();
@@ -164,23 +146,18 @@ function HomePageContent() {
 
       // Handle employees result
       if (employeesResult.status === 'fulfilled' && employeesResult.value) {
-        console.log('✅ Employees loaded (fallback):', employeesResult.value.employees?.length || 0);
         setEmployees(employeesResult.value.employees || []);
       } else {
-        console.error('❌ Failed to load employees (fallback)');
         setEmployees([]);
       }
 
       // Handle screenshots result
       if (screenshotsResult.status === 'fulfilled' && screenshotsResult.value) {
-        console.log('✅ Screenshots loaded (fallback):', screenshotsResult.value.screenshots?.length || 0);
         setScreenshots(screenshotsResult.value.screenshots || []);
       } else {
-        console.error('❌ Failed to load screenshots (fallback)');
         setScreenshots([]);
       }
     } catch (error) {
-      console.error("❌ Error in fallback data loading:", error);
       // Set empty arrays to prevent infinite loading
       setEmployees([]);
       setScreenshots([]);

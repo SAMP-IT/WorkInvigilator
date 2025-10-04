@@ -117,7 +117,6 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error fetching screenshots:', error)
     return NextResponse.json(
       { error: 'Failed to fetch screenshots data' },
       { status: 500 }
@@ -158,7 +157,6 @@ export async function DELETE(request: NextRequest) {
       .eq('id', screenshotId)
 
     if (error) {
-      console.error('Error deleting screenshot from database:', error)
       return NextResponse.json(
         { error: 'Failed to delete screenshot' },
         { status: 500 }
@@ -168,7 +166,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ message: 'Screenshot deleted successfully' })
 
   } catch (error) {
-    console.error('Error deleting screenshot:', error)
     return NextResponse.json(
       { error: 'Failed to delete screenshot' },
       { status: 500 }

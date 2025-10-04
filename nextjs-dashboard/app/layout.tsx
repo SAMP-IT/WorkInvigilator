@@ -12,9 +12,9 @@ export const metadata: Metadata = {
   title: "Work Invigilator - Executive Dashboard",
   description: "Professional work monitoring and employee management dashboard with Executive Slate design system",
   icons: {
-    icon: '/target.png',
-    shortcut: '/target.png',
-    apple: '/target.png',
+    icon: '/focus.png',
+    shortcut: '/focus.png',
+    apple: '/focus.png',
   },
 };
 

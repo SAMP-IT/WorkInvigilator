@@ -8,7 +8,6 @@ export async function POST(request: NextRequest) {
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
     if (!supabaseServiceKey) {
-      console.error('SUPABASE_SERVICE_ROLE_KEY not found')
       return NextResponse.json(
         { error: 'Server configuration error: Service role key not found' },
         { status: 500 }
@@ -60,7 +59,6 @@ export async function POST(request: NextRequest) {
     })
 
     if (error) {
-      console.error('Supabase auth error:', error)
 
       // Handle specific error cases
       if (error.message.includes('already registered')) {
@@ -93,12 +91,10 @@ export async function POST(request: NextRequest) {
       })
 
     if (profileError) {
-      console.error('Error creating profile:', profileError)
       // Don't fail the whole operation if profile creation fails
       // The user can still log in and the profile might be created later
     }
 
-    console.log(`✅ User created successfully: ${email} (ID: ${data.user.id})`)
 
     return NextResponse.json({
       success: true,
@@ -111,7 +107,6 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Unexpected error in create-user API:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

@@ -252,7 +252,6 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error fetching dashboard metrics:', error)
     return NextResponse.json(
       { error: 'Failed to fetch dashboard metrics' },
       { status: 500 }
@@ -295,7 +294,6 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Error in dashboard POST endpoint:', error)
     return NextResponse.json(
       { error: 'Failed to process dashboard action' },
       { status: 500 }

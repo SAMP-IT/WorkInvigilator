@@ -214,7 +214,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ report: reportData })
 
   } catch (error) {
-    console.error('Error generating report:', error)
     return NextResponse.json(
       { error: 'Failed to generate report' },
       { status: 500 }

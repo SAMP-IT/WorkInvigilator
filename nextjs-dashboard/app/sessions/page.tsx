@@ -101,23 +101,18 @@ export default function SessionsPage() {
       const sessionsResponse = await fetch(`/api/sessions?organizationId=${profile.organization_id}`);
       if (sessionsResponse.ok) {
         const sessionsData = await sessionsResponse.json();
-        console.log('Sessions loaded:', sessionsData);
         setSessions(sessionsData.sessions || []);
       } else {
-        console.error('Failed to load sessions:', sessionsResponse.status);
       }
 
       // Load employees with session timing
       const employeesResponse = await fetch(`/api/employees?organizationId=${profile.organization_id}`);
       if (employeesResponse.ok) {
         const employeesData = await employeesResponse.json();
-        console.log('Sessions page - employees loaded:', employeesData); // Debug log
         setEmployees(employeesData.employees || []);
       } else {
-        console.error('Failed to load employees:', employeesResponse.status);
       }
     } catch (err) {
-      console.error('Error loading data:', err);
       setError('Failed to load data. Please try again.');
     } finally {
       setLoading(false);

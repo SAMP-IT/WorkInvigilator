@@ -12,11 +12,8 @@ function getSupabaseAdminClient() {
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    console.error('❌ Supabase admin credentials missing!')
     throw new Error('Supabase admin environment variables are not configured')
   }
-
-  console.log('🔧 Initializing Supabase Admin client...')
 
   supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
@@ -30,7 +27,6 @@ function getSupabaseAdminClient() {
     },
   })
 
-  console.log('✅ Supabase Admin client initialized')
   return supabaseAdminInstance
 }
 

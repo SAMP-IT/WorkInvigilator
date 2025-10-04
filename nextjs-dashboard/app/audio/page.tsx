@@ -56,11 +56,9 @@ function AudioPageContent() {
         if (data.employees && data.employees.length > 0 && !selectedEmployee) {
           setSelectedEmployee(data.employees[0].id);
         }
-      } else {
-        console.error('Failed to load employees');
       }
     } catch (error) {
-      console.error('Error loading employees:', error);
+      // Error loading employees
     } finally {
       setLoading(false);
     }
@@ -71,7 +69,6 @@ function AudioPageContent() {
       setLoading(true);
 
       if (!profile?.organization_id) {
-        console.error('No organization ID found');
         setLoading(false);
         return;
       }
@@ -96,12 +93,10 @@ function AudioPageContent() {
         });
         setUserEmailMap(emailMap);
       } else {
-        console.error('Failed to load recordings');
         setRecordings([]);
       }
 
     } catch (error) {
-      console.error('Error loading recordings:', error);
       setRecordings([]);
     } finally {
       setLoading(false);

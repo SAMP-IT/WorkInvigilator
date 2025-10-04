@@ -216,7 +216,6 @@ export default function ReportsPage() {
         setSelectedEmployee(employeeList[0].id);
       }
     } catch (err) {
-      console.error('Error loading employees:', err);
       setError('Failed to load employees.');
     }
   };
@@ -240,7 +239,6 @@ export default function ReportsPage() {
       const data = await response.json();
       setReportData(data.report);
     } catch (err) {
-      console.error('Error loading report data:', err);
       setError('Failed to load report data. Please try again.');
     } finally {
       setLoading(false);

@@ -48,13 +48,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    console.log('🔐 AuthProvider: Initializing...')
     let mounted = true
 
     // Set a maximum time for initialization - MUST finish within 3 seconds
     const initTimeout = setTimeout(() => {
       if (mounted) {
-        console.warn('⚠️ Auth initialization timeout - forcing loading to false')
         setLoading(false)
       }
     }, 3000) // 3 second max - faster timeout
@@ -62,8 +60,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Get initial session with timeout
     const initializeAuth = async () => {
       try {
-        console.log('🔐 AuthProvider: Getting initial session...')
-
         // Quick session check - fail fast
         const { data: { session }, error } = await withTimeout(
           supabase.auth.getSession(),
@@ -73,13 +69,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!mounted) return
 
         if (error) {
-          console.error('❌ Error getting session:', error)
           setLoading(false)
           clearTimeout(initTimeout)
           return
         }
 
-        console.log('✅ Session retrieved:', session ? 'logged in' : 'not logged in')
         setSession(session)
         setUser(session?.user ?? null)
 
@@ -95,12 +89,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           clearTimeout(initTimeout)
         }
       } catch (error) {
-        // Only log non-timeout errors
-        if (error instanceof Error && error.name !== 'TimeoutError') {
-          console.error('❌ Error initializing auth:', error)
-        } else {
-          console.warn('⏱️ Auth initialization timeout - continuing anyway')
-        }
         if (mounted) {
           setLoading(false)
           clearTimeout(initTimeout)
@@ -116,7 +104,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return
 
-      console.log('🔐 Auth state changed:', event, session ? 'with session' : 'no session')
       setSession(session)
       setUser(session?.user ?? null)
 
@@ -140,8 +127,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const RETRY_DELAY = 500 // Faster retry
 
     try {
-      console.log(`👤 Loading profile for user ${userId} (attempt ${retryCount + 1})...`)
-
       const profileResult = await supabase
         .from('profiles')
         .select('*, organizations(id, name)')
@@ -151,11 +136,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: profile, error } = profileResult
 
       if (error) {
-        console.error('❌ Error loading user profile:', error)
-
         // If profile doesn't exist, create a default one for this user
         if (error.code === 'PGRST116') { // No rows returned
-          console.log('📝 No profile found, creating default profile...')
           try {
             const { data: user } = await withTimeout(
               supabase.auth.getUser(),
@@ -182,42 +164,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .single()
 
               if (createError) {
-                console.error('❌ Error creating profile:', createError)
                 setProfile(null)
               } else {
-                console.log('✅ Profile created successfully')
                 setProfile(newProfile)
               }
             }
           } catch (createError) {
-            console.error('❌ Error in profile creation flow:', createError)
             setProfile(null)
           }
         } else if (retryCount < MAX_RETRIES && error.message.includes('timeout')) {
           // Retry on timeout
-          console.log(`🔄 Retrying profile load after timeout...`)
           await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
           return loadUserProfile(userId, retryCount + 1)
         } else {
           setProfile(null)
         }
       } else {
-        console.log('✅ Profile loaded successfully:', profile.email)
         setProfile(profile)
       }
     } catch (error) {
-      console.error('❌ Error loading user profile:', error)
-
       // Retry on network errors
       if (retryCount < MAX_RETRIES) {
-        console.log(`🔄 Retrying profile load (${retryCount + 1}/${MAX_RETRIES})...`)
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
         return loadUserProfile(userId, retryCount + 1)
       }
 
       setProfile(null)
     } finally {
-      console.log('✅ Profile loading complete, setting loading to false')
       setLoading(false)
     }
   }

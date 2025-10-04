@@ -82,7 +82,6 @@ export default function ScreenshotsPage() {
       const screenshotsData = await screenshotsResponse.json();
       setScreenshots(screenshotsData.screenshots || []);
     } catch (err) {
-      console.error('Error loading data:', err);
       setError('Failed to load screenshots. Please try again.');
     } finally {
       setLoading(false);
@@ -103,7 +102,6 @@ export default function ScreenshotsPage() {
       await loadData();
       setSelectedScreenshot(null);
     } catch (err) {
-      console.error('Error deleting screenshot:', err);
       setError('Failed to delete screenshot. Please try again.');
     }
   };

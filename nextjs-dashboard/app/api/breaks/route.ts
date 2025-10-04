@@ -40,7 +40,6 @@ export async function GET(request: NextRequest) {
     const { data: breakSessions, error: breaksError } = await query
 
     if (breaksError) {
-      console.error('Error fetching break sessions:', breaksError)
       return NextResponse.json(
         { error: 'Failed to fetch break sessions' },
         { status: 500 }
@@ -117,7 +116,6 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error fetching break sessions:', error)
     return NextResponse.json(
       { error: 'Failed to fetch break sessions' },
       { status: 500 }

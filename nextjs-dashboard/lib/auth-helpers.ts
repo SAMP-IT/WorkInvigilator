@@ -42,7 +42,6 @@ export async function getCurrentUserAndOrg(request: NextRequest): Promise<{
       organizationId: profile.organization_id
     }
   } catch (error) {
-    console.error('Error getting current user and org:', error)
     return { userId: null, organizationId: null, error: 'Internal error' }
   }
 }

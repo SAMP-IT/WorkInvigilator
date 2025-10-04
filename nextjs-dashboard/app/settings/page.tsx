@@ -80,7 +80,6 @@ export default function SettingsPage() {
         department: data.currentUser?.department || ''
       });
     } catch (err) {
-      console.error('Error loading settings:', err);
       setError('Failed to load settings. Please try again.');
     } finally {
       setLoading(false);
@@ -108,7 +107,6 @@ export default function SettingsPage() {
       setSettings(data.settings);
       setIsEditing(false);
     } catch (err) {
-      console.error('Error saving settings:', err);
       setError('Failed to save settings. Please try again.');
     } finally {
       setSaving(false);

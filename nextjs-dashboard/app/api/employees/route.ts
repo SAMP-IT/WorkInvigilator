@@ -3,7 +3,6 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('API: Starting employee fetch...') // Debug log
 
     // Get organization_id from query params (passed from frontend)
     const { searchParams } = new URL(request.url)
@@ -24,11 +23,8 @@ export async function GET(request: NextRequest) {
       .in('role', ['user', 'admin']) // Include both users and admins
       .order('created_at', { ascending: false })
 
-    console.log('API: Raw employees data:', employees) // Debug log
-    console.log('API: Error:', employeesError) // Debug log
 
     if (employeesError) {
-      console.error('Error fetching employees:', employeesError)
       return NextResponse.json(
         { error: 'Failed to fetch employees data', details: employeesError },
         { status: 500 }
@@ -36,7 +32,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (!employees || employees.length === 0) {
-      console.log('API: No employees found') // Debug log
       return NextResponse.json({
         employees: [],
         totalCount: 0
@@ -136,7 +131,6 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    console.log('API: Returning employees with real metrics:', employeesWithMetrics.length) // Debug log
 
     return NextResponse.json({
       employees: employeesWithMetrics,
@@ -144,7 +138,6 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error fetching employees:', error)
     return NextResponse.json(
       { error: 'Failed to fetch employees data' },
       { status: 500 }
@@ -170,7 +163,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('Creating user account...', { email, name })
 
     // Check if user already exists in profiles
     const { data: existingProfile } = await supabaseAdmin
@@ -198,7 +190,6 @@ export async function POST(request: NextRequest) {
     })
 
     if (createUserError) {
-      console.error('Create user error:', createUserError)
       return NextResponse.json(
         { error: `Failed to create user: ${createUserError.message}` },
         { status: 400 }
@@ -212,7 +203,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('User created:', createUserData.user.id)
 
     // Now create/update the profile with organization
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -233,14 +223,12 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (profileError) {
-      console.error('Profile creation error:', profileError)
       return NextResponse.json(
         { error: `Failed to create profile: ${profileError.message}` },
         { status: 500 }
       )
     }
 
-    console.log('Employee created successfully:', profile)
 
     return NextResponse.json({
       employee: profile,
@@ -253,7 +241,6 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error creating employee:', error)
     return NextResponse.json(
       { error: 'Failed to create employee' },
       { status: 500 }

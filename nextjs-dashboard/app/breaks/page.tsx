@@ -78,7 +78,6 @@ export default function BreaksPage() {
       const breaksData = await breaksResponse.json();
       setBreakSessions(breaksData.breakSessions || []);
     } catch (err) {
-      console.error('Error loading data:', err);
       setError('Failed to load break sessions. Please try again.');
     } finally {
       setLoading(false);

@@ -26,13 +26,11 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
   const router = useRouter();
 
   useEffect(() => {
-    console.log('🛡️ AuthGuard: Starting auth check...')
     let mounted = true
 
     // Set maximum timeout for auth check - MUST finish quickly
     const authTimeout = setTimeout(() => {
       if (mounted) {
-        console.warn('⚠️ AuthGuard: Auth check timeout')
         setError('Authentication check timed out. Please refresh the page.')
         setIsLoading(false)
       }
@@ -40,7 +38,6 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
 
     const checkAuth = async () => {
       try {
-        console.log('🛡️ AuthGuard: Getting session...')
         const { data: { session }, error: sessionError } = await withTimeout(
           supabase.auth.getSession(),
           2000 // 2 second timeout
@@ -49,12 +46,10 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
         if (!mounted) return
 
         if (sessionError) {
-          console.error('❌ Session error:', sessionError)
           throw sessionError
         }
 
         if (!session) {
-          console.log('🚫 No session found, redirecting to login')
           clearTimeout(authTimeout)
           if (mounted) {
             // Use window.location for reliable redirect
@@ -62,8 +57,6 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
           }
           return
         }
-
-        console.log('✅ Session found, fetching profile...')
 
         // Get user profile to check role with timeout
         const { data: profile, error: profileError } = await supabase
@@ -74,18 +67,10 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
 
         if (!mounted) return
 
-        if (profileError) {
-          console.error('❌ Profile error:', profileError)
-          // Continue with default role instead of blocking
-          console.warn('⚠️ Using default role due to profile fetch error')
-        }
-
         const role = profile?.role || 'user'
-        console.log('👤 User role:', role)
 
         // Check if user has required role
         if (requiredRole && role !== requiredRole && role !== 'admin') {
-          console.log('🚫 Insufficient permissions, redirecting to unauthorized')
           clearTimeout(authTimeout)
           if (mounted) {
             window.location.href = '/unauthorized'
@@ -93,11 +78,9 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
           return
         }
 
-        console.log('✅ Auth check passed')
         setIsAuthenticated(true)
         clearTimeout(authTimeout)
       } catch (error) {
-        console.error('❌ Auth check error:', error)
         clearTimeout(authTimeout)
 
         if (!mounted) return
@@ -111,7 +94,6 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
         }
       } finally {
         if (mounted) {
-          console.log('✅ Auth check complete, setting loading to false')
           setIsLoading(false)
         }
       }
@@ -122,7 +104,6 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return
-      console.log('🛡️ AuthGuard: Auth state changed:', event)
       if (event === 'SIGNED_OUT' || !session) {
         window.location.href = '/login'
       }

@@ -78,7 +78,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(settingsData)
 
   } catch (error) {
-    console.error('Error fetching settings:', error)
     return NextResponse.json(
       { error: 'Failed to fetch settings' },
       { status: 500 }
@@ -111,7 +110,6 @@ export async function PUT(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('Error updating profile:', error)
       return NextResponse.json(
         { error: 'Failed to update profile' },
         { status: 500 }
@@ -124,7 +122,6 @@ export async function PUT(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error updating settings:', error)
     return NextResponse.json(
       { error: 'Failed to update settings' },
       { status: 500 }

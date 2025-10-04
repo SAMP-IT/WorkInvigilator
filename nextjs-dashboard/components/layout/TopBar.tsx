@@ -52,7 +52,7 @@ export function TopBar() {
 
         setActiveSessions(count || 0);
       } catch (error) {
-        console.error('Error loading active sessions:', error);
+        // Error loading active sessions
       }
     };
 

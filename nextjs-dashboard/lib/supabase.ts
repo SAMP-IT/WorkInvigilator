@@ -12,11 +12,8 @@ function getSupabaseClient() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('❌ Supabase credentials missing!')
     throw new Error('Supabase environment variables are not configured')
   }
-
-  console.log('🔧 Initializing Supabase client...')
 
   supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
@@ -32,7 +29,6 @@ function getSupabaseClient() {
     },
   })
 
-  console.log('✅ Supabase client initialized')
   return supabaseInstance
 }
 
