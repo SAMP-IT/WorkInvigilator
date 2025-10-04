@@ -50,13 +50,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true
 
-    // Set a maximum time for initialization - MUST finish within 3 seconds
+    // Set a maximum time for initialization - MUST finish within 5 seconds
     const initTimeout = setTimeout(() => {
       if (mounted) {
-        console.log('[AuthContext] Init timeout reached')
+        console.log('[AuthContext] Init timeout reached - forcing loading to false')
         setLoading(false)
       }
-    }, 3000) // 3 second max - faster timeout
+    }, 5000) // 5 second max to allow profile query time
 
     // Get initial session with timeout
     const initializeAuth = async () => {
@@ -127,18 +127,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   async function loadUserProfile(userId: string, retryCount = 0) {
-    const MAX_RETRIES = 1 // Only 1 retry - fail faster
-    const RETRY_DELAY = 500 // Faster retry
+    const MAX_RETRIES = 0 // No retries - fail fast
+    const PROFILE_TIMEOUT = 3000 // 3 second timeout for profile query
 
     try {
       console.log('[AuthContext] Loading profile for user:', userId, 'Retry:', retryCount)
 
-      // Simplified query without join to prevent hanging on Vercel
-      const profileResult = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Profile query timeout')), PROFILE_TIMEOUT)
+      })
+
+      // Race the profile query against the timeout
+      const profileResult = await Promise.race([
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single(),
+        timeoutPromise
+      ]) as { data: any; error: any }
 
       const { data: profile, error } = profileResult
 
@@ -193,13 +201,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('[AuthContext] Unexpected error loading profile:', error)
-      // Retry on network errors
-      if (retryCount < MAX_RETRIES) {
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
-        return loadUserProfile(userId, retryCount + 1)
-      }
 
-      setProfile(null)
+      if (error instanceof Error && error.message === 'Profile query timeout') {
+        console.log('[AuthContext] Profile query timed out - proceeding without profile')
+        // Set a minimal profile to allow user to continue
+        setProfile({
+          id: userId,
+          email: '',
+          role: 'user',
+          organization_id: null
+        } as any)
+      } else {
+        setProfile(null)
+      }
     } finally {
       console.log('[AuthContext] Profile loading complete, setting loading to false')
       setLoading(false)
