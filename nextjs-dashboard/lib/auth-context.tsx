@@ -134,6 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const RETRY_DELAY = 500 // Faster retry
 
     try {
+      console.log('[AuthContext] Loading profile for user:', userId, 'Retry:', retryCount)
       const profileResult = await supabase
         .from('profiles')
         .select('*, organizations(id, name)')
@@ -143,6 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: profile, error } = profileResult
 
       if (error) {
+        console.log('[AuthContext] Profile load error:', error.message, error.code)
         // If profile doesn't exist, create a default one for this user
         if (error.code === 'PGRST116') { // No rows returned
           try {
@@ -171,8 +173,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .single()
 
               if (createError) {
+                console.log('[AuthContext] Failed to create profile:', createError.message)
                 setProfile(null)
               } else {
+                console.log('[AuthContext] Created new profile:', newProfile)
                 setProfile(newProfile)
               }
             }
@@ -184,12 +188,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
           return loadUserProfile(userId, retryCount + 1)
         } else {
+          console.log('[AuthContext] Profile error (non-retryable):', error.message)
           setProfile(null)
         }
       } else {
+        console.log('[AuthContext] Profile loaded successfully:', profile)
         setProfile(profile)
       }
     } catch (error) {
+      console.error('[AuthContext] Unexpected error loading profile:', error)
       // Retry on network errors
       if (retryCount < MAX_RETRIES) {
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
@@ -198,6 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setProfile(null)
     } finally {
+      console.log('[AuthContext] Profile loading complete, setting loading to false')
       setLoading(false)
     }
   }

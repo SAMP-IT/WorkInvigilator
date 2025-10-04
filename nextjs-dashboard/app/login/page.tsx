@@ -36,15 +36,19 @@ export default function LoginPage() {
         } else {
           setError(error.message)
         }
+        setLoading(false)
       } else {
-        console.log('[Login] Sign in successful, redirecting to home page')
-        // Force a hard redirect to clear any cached state
-        window.location.href = '/'
+        console.log('[Login] Sign in successful, redirecting to home page in 500ms')
+        // Keep loading state true during redirect
+        // Add a small delay to ensure auth state is propagated
+        setTimeout(() => {
+          console.log('[Login] Executing redirect now')
+          window.location.href = '/'
+        }, 500)
       }
     } catch (err) {
       console.error('[Login] Unexpected error:', err)
       setError('An unexpected error occurred')
-    } finally {
       setLoading(false)
     }
   }
