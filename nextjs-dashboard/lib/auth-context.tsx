@@ -151,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             role: 'user',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            organization_id: null,
+            organization_id: undefined,
           } as Profile)
         }
       } catch (fetchError) {
@@ -167,7 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: 'user',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        organization_id: null,
+        organization_id: undefined,
       } as Profile)
     } finally {
       console.log('[Auth] Setting loading to false')
