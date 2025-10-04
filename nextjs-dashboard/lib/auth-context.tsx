@@ -30,7 +30,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Timeout to ensure loading state doesn't hang forever
     const timeout = setTimeout(() => {
       if (mounted) {
-        console.warn('[Auth] Initialization timeout - setting loading to false')
         setLoading(false)
       }
     }, 5000) // 5 second timeout
@@ -38,8 +37,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Get initial session
     const initializeAuth = async () => {
       try {
-        console.log('[Auth] Initializing...')
-
         // Add timeout wrapper for getSession
         const sessionPromise = supabase.auth.getSession()
         const timeoutPromise = new Promise((_, reject) =>
@@ -54,24 +51,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(timeout)
 
         if (error) {
-          console.error('[Auth] Session error:', error)
           setLoading(false)
           return
         }
 
-        console.log('[Auth] Session:', session ? 'Found' : 'None')
         setSession(session)
         setUser(session?.user ?? null)
 
         if (session?.user) {
-          console.log('[Auth] Loading profile for user:', session.user.id)
           await loadUserProfile(session.user.id)
         } else {
-          console.log('[Auth] No session, setting loading to false')
           setLoading(false)
         }
       } catch (error) {
-        console.error('[Auth] Init error:', error)
         if (mounted) {
           clearTimeout(timeout)
           setLoading(false)
@@ -83,7 +75,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[Auth] State change:', event, session ? 'Has session' : 'No session')
       if (!mounted) return
 
       setSession(session)
@@ -106,8 +97,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function loadUserProfile(userId: string) {
     try {
-      console.log('[Auth] Fetching profile for:', userId)
-
       // Use fetch API instead of Supabase client for more control
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -141,10 +130,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = await response.json()
 
         if (data && data.length > 0) {
-          console.log('[Auth] Profile loaded:', data[0])
           setProfile(data[0])
         } else {
-          console.log('[Auth] No profile found, using fallback')
           setProfile({
             id: userId,
             email: '',
@@ -159,7 +146,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw fetchError
       }
     } catch (error) {
-      console.error('[Auth] Error loading profile:', error)
       // Set a fallback profile so the app doesn't hang
       setProfile({
         id: userId,
@@ -170,7 +156,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         organization_id: undefined,
       } as Profile)
     } finally {
-      console.log('[Auth] Setting loading to false')
       setLoading(false)
     }
   }

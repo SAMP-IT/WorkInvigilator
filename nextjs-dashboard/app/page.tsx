@@ -50,12 +50,9 @@ function HomePageContent() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    console.log('[HomePage] Profile:', profile, 'Auth Loading:', authLoading)
     if (profile?.organization_id) {
-      console.log('[HomePage] Loading data for organization:', profile.organization_id)
       loadData();
     } else if (!authLoading) {
-      console.log('[HomePage] No profile but auth finished loading')
       setLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
