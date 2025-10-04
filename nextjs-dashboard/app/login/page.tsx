@@ -35,7 +35,8 @@ export default function LoginPage() {
           setError(error.message)
         }
       } else {
-        router.push('/')
+        // Force a hard redirect to clear any cached state
+        window.location.href = '/'
       }
     } catch (err) {
       setError('An unexpected error occurred')
