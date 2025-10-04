@@ -62,11 +62,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initializeAuth = async () => {
       try {
         console.log('[AuthContext] Initializing auth, getting session...')
-        // Quick session check - fail fast
-        const { data: { session }, error } = await withTimeout(
-          supabase.auth.getSession(),
-          2000 // 2 second timeout
-        )
+        // Don't wrap getSession in timeout - Supabase handles this internally
+        const { data: { session }, error } = await supabase.auth.getSession()
 
         if (!mounted) return
 
@@ -148,10 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // If profile doesn't exist, create a default one for this user
         if (error.code === 'PGRST116') { // No rows returned
           try {
-            const { data: user } = await withTimeout(
-              supabase.auth.getUser(),
-              3000
-            )
+            const { data: user } = await supabase.auth.getUser()
 
             if (user.user) {
               // Get or create default organization

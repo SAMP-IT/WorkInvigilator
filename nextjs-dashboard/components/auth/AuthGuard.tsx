@@ -40,10 +40,8 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     const checkAuth = async () => {
       try {
         console.log('[AuthGuard] Checking authentication...')
-        const { data: { session }, error: sessionError } = await withTimeout(
-          supabase.auth.getSession(),
-          2000 // 2 second timeout
-        )
+        // Don't wrap getSession in timeout - Supabase handles this internally
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
         if (!mounted) return
 
