@@ -27,6 +27,13 @@ function getSupabaseClient() {
         'x-client-info': 'work-invigilator-dashboard',
       },
     },
+    db: {
+      schema: 'public',
+    },
+    // Optimize for Vercel deployment
+    realtime: {
+      timeout: 5000,
+    },
   })
 
   return supabaseInstance

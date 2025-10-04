@@ -203,8 +203,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('[AuthContext] Unexpected error loading profile:', error)
 
       if (error instanceof Error && error.message === 'Profile query timeout') {
-        console.log('[AuthContext] Profile query timed out - proceeding without profile')
-        // Set a minimal profile to allow user to continue
+        console.log('[AuthContext] Profile query timed out - trying REST API fallback')
+
+        // Fallback: Try direct REST API call
+        try {
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+          const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+          if (!supabaseUrl || !supabaseKey) {
+            throw new Error('Supabase config missing')
+          }
+
+          const response = await fetch(
+            `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=*`,
+            {
+              headers: {
+                'apikey': supabaseKey,
+                'Authorization': `Bearer ${supabaseKey}`,
+              },
+              signal: AbortSignal.timeout(2000) // 2 second timeout
+            }
+          )
+
+          if (response.ok) {
+            const data = await response.json()
+            if (data && data.length > 0) {
+              console.log('[AuthContext] Profile loaded via REST API fallback:', data[0])
+              setProfile(data[0])
+              setLoading(false)
+              return
+            }
+          }
+        } catch (fallbackError) {
+          console.error('[AuthContext] REST API fallback also failed:', fallbackError)
+        }
+
+        // If all fails, set minimal profile
+        console.log('[AuthContext] All profile loading attempts failed - proceeding with minimal profile')
         setProfile({
           id: userId,
           email: '',
