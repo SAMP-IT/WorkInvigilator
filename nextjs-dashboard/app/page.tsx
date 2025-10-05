@@ -48,6 +48,7 @@ function HomePageContent() {
     null
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [kpis, setKpis] = useState({ activeSessions: 0, totalEmployees: 0, avgProductivity: 0, totalScreenshots: 0 });
 
   useEffect(() => {
     if (profile?.organization_id) {
@@ -84,6 +85,11 @@ function HomePageContent() {
 
       if (dashboardResponse.ok) {
         const dashboardData = await dashboardResponse.json();
+
+        // Set KPIs from dashboard data
+        if (dashboardData.kpis) {
+          setKpis(dashboardData.kpis);
+        }
 
         // Set screenshots from dashboard data
         const screenshots = dashboardData.recentScreenshots || [];
@@ -198,21 +204,13 @@ function HomePageContent() {
           <KpiTile
             icon={<KpiIcon src="/sessions.png" alt="Active Sessions" />}
             label="Active Sessions"
-            value={employees.filter(emp => emp.status === 'online').length}
+            value={kpis.activeSessions}
             onClick={() => router.push("/sessions")}
-          />
-          <KpiTile
-            icon={<KpiIcon src="/employees.png" alt="Active Employees" />}
-            label="Active Employees"
-            value={employees.length}
-            onClick={() => router.push("/employees")}
           />
           <KpiTile
             icon={<KpiIcon src="/productivity.png" alt="Productivity" />}
             label="Productivity %"
-            value={employees.length > 0 ?
-              `${(employees.reduce((sum, emp) => sum + emp.productivity7d, 0) / employees.length).toFixed(1)}%` :
-              "0%"}
+            value={`${kpis.avgProductivity}%`}
             onClick={() => router.push("/reports")}
           />
           <KpiTile
@@ -234,7 +232,7 @@ function HomePageContent() {
           <KpiTile
             icon={<KpiIcon src="/screenshots.png" alt="Screenshots" />}
             label="Screenshots Today"
-            value={screenshots.length}
+            value={kpis.totalScreenshots}
             onClick={() => router.push("/screenshots")}
           />
         </div>

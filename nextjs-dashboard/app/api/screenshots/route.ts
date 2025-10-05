@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getValidUrl, extractFilePathFromUrl } from '@/lib/backblaze-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -58,8 +59,8 @@ export async function GET(request: NextRequest) {
       return acc
     }, {} as Record<string, { id: string; name: string; email: string }>)
 
-    // Format screenshots for frontend
-    const formattedScreenshots = (screenshots || []).map(screenshot => {
+    // Format screenshots for frontend with URL validation
+    const formattedScreenshots = await Promise.all((screenshots || []).map(async screenshot => {
       // Extract timestamp from created_at
       const timestamp = new Date(screenshot.created_at).toLocaleString('en-GB', {
         day: '2-digit',
@@ -74,17 +75,38 @@ export async function GET(request: NextRequest) {
 
       const profile = profileMap[screenshot.user_id]
 
+      // Get valid URL, regenerating if expired
+      let validUrl = screenshot.file_url
+      if (screenshot.storage_provider === 'backblaze' && screenshot.file_url) {
+        const filePath = extractFilePathFromUrl(screenshot.file_url)
+        if (filePath) {
+          try {
+            validUrl = await getValidUrl(
+              screenshot.file_url,
+              screenshot.backup_file_url,
+              filePath,
+              'screenshots',
+              screenshot.storage_provider
+            )
+          } catch (error) {
+            console.error('Failed to get valid URL for screenshot:', screenshot.id, error)
+            // Fallback to backup or original URL
+            validUrl = screenshot.backup_file_url || screenshot.file_url
+          }
+        }
+      }
+
       return {
         id: screenshot.id,
         employeeId: screenshot.user_id,
         employeeName: profile?.name || profile?.email || 'Unknown Employee',
         timestamp,
-        url: screenshot.file_url,
+        url: validUrl,
         size: estimatedSize,
         application: 'Work Application', // Placeholder since we don't track specific apps yet
         filename: screenshot.filename
       }
-    })
+    }))
 
     // Get summary statistics with same filters
     let countQuery = supabaseAdmin

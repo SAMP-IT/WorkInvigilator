@@ -127,6 +127,10 @@ class WorkInvigilatorApp {
   
   async initializeSupabase() {
     try {
+      // Get Backblaze config
+      const backblazeConfig = await window.electronAPI.getBackblazeConfig();
+      this.backblazeEnabled = backblazeConfig?.enabled || false;
+
       // Create a wrapper around IPC calls to Supabase
       this.supabase = {
         auth: {
@@ -212,8 +216,9 @@ class WorkInvigilatorApp {
           })
         }
       };
-      
+
       console.log('✅ Supabase IPC wrapper initialized');
+      console.log(`ℹ️ Backblaze B2: ${this.backblazeEnabled ? 'Enabled' : 'Disabled'}`);
     } catch (error) {
       console.error('❌ Failed to initialize Supabase:', error);
       this.showMessage('Failed to initialize database connection', 'error');
@@ -640,7 +645,7 @@ class WorkInvigilatorApp {
     if (!this.supabase || !this.currentUser || this.audioChunks.length === 0) {
       return;
     }
-    
+
     try {
       const chunkBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
       const arrayBuffer = await chunkBlob.arrayBuffer();
@@ -648,22 +653,90 @@ class WorkInvigilatorApp {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const chunkNumber = this.sessionChunks.length + 1;
       const filename = `${this.currentUser.id}/chunk_${chunkNumber}_${timestamp}.webm`;
-      
-      console.log('💾 Saving chunk:', chunkNumber);
-      
-      const { data: uploadData, error: uploadError } = await this.supabase.storage
-        .from('audio-recordings')
-        .upload(filename, arrayBuffer);
-      
-      if (uploadError) {
-        console.error('❌ Chunk upload error:', uploadError);
-        return;
+
+      console.log('💾 Saving audio chunk:', chunkNumber, `(${(arrayBuffer.byteLength / 1024).toFixed(2)} KB)`);
+
+      let primaryUrl = null;
+      let backupUrl = null;
+
+      // Try Backblaze first (if enabled)
+      if (this.backblazeEnabled) {
+        console.log('📤 Attempting Backblaze upload for audio chunk...');
+        try {
+          const { data: backblazeData, error: backblazeError } = await window.electronAPI.backblazeStorage('upload', {
+            bucket: 'audio-recordings',
+            path: filename,
+            file: arrayBuffer
+          });
+
+          if (!backblazeError && backblazeData) {
+            primaryUrl = backblazeData.publicUrl;
+            console.log('✅ SUCCESS: Audio uploaded to Backblaze (primary)');
+            console.log('🔗 Backblaze URL:', primaryUrl);
+          } else {
+            console.error('❌ FAILED: Backblaze upload error:', backblazeError);
+          }
+        } catch (error) {
+          console.error('❌ FAILED: Backblaze upload exception:', error.message);
+          console.warn('⚠️ Falling back to Supabase as primary...');
+        }
+      } else {
+        console.log('ℹ️ Backblaze disabled, using Supabase only');
       }
+
+      // Always upload to Supabase (as backup or primary)
+      let uploadData, uploadError;
       
-      const urlData = await this.supabase.storage
-        .from('audio-recordings')
-        .getPublicUrl(filename);
-      
+      try {
+        const uploadResult = await this.supabase.storage
+          .from('audio-recordings')
+          .upload(filename, arrayBuffer);
+        uploadData = uploadResult.data;
+        uploadError = uploadResult.error;
+      } catch (error) {
+        uploadError = error;
+      }
+
+      // If token expired, refresh and retry once
+      if (uploadError && (uploadError.message?.includes('exp') || uploadError.message?.includes('token'))) {
+        console.log('🔄 Token expired, refreshing and retrying audio upload...');
+        await this.refreshAuthToken();
+        
+        const retryResult = await this.supabase.storage
+          .from('audio-recordings')
+          .upload(filename, arrayBuffer);
+        uploadData = retryResult.data;
+        uploadError = retryResult.error;
+      }
+
+      if (uploadError) {
+        console.error('❌ FAILED: Supabase audio upload error:', uploadError);
+        // If both failed, return
+        if (!primaryUrl) {
+          console.error('💥 CRITICAL: Both Backblaze and Supabase failed for audio chunk', chunkNumber);
+          return;
+        } else {
+          console.warn('⚠️ Supabase backup failed, but Backblaze succeeded');
+        }
+      } else {
+        const urlData = await this.supabase.storage
+          .from('audio-recordings')
+          .getPublicUrl(filename);
+
+        backupUrl = urlData.publicUrl;
+
+        if (!primaryUrl) {
+          // If Backblaze failed/disabled, use Supabase as primary
+          primaryUrl = backupUrl;
+          console.log('✅ SUCCESS: Audio uploaded to Supabase (primary)');
+          console.log('🔗 Supabase URL:', backupUrl);
+        } else {
+          console.log('✅ SUCCESS: Audio uploaded to Supabase (backup)');
+          console.log('🔗 Backup URL:', backupUrl);
+        }
+      }
+
+      // Save to database with primary URL and backup URL
       const { error: dbError } = await this.supabase
         .from('recording_chunks')
         .insert([{
@@ -672,23 +745,28 @@ class WorkInvigilatorApp {
           session_start_time: this.sessionStartTime.toISOString(),
           chunk_number: chunkNumber,
           filename: filename,
-          file_url: urlData.publicUrl,
+          file_url: primaryUrl,
+          backup_file_url: backupUrl,
+          storage_provider: this.backblazeEnabled ? 'backblaze' : 'supabase',
           duration_seconds: chunkDuration,
           chunk_start_time: new Date(this.currentChunkStartTime).toISOString()
         }]);
-      
+
       if (!dbError) {
         this.sessionChunks.push({
           chunk_number: chunkNumber,
           filename: filename,
-          file_url: urlData.publicUrl,
+          file_url: primaryUrl,
           duration: chunkDuration
         });
-        console.log(`✅ Chunk ${chunkNumber} saved`);
+        console.log(`💾 Chunk ${chunkNumber} saved to database (primary: ${this.backblazeEnabled ? 'Backblaze' : 'Supabase'}, ${chunkDuration}s)`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      } else {
+        console.error('❌ FAILED: Database insert error for chunk', chunkNumber, dbError);
       }
-      
+
     } catch (error) {
-      console.error('❌ Save chunk error:', error);
+      console.error('💥 Save chunk error:', error);
     }
   }
   
@@ -785,23 +863,93 @@ class WorkInvigilatorApp {
       const response = await fetch(dataUrl);
       const blob = await response.blob();
       const arrayBuffer = await blob.arrayBuffer();
-      
+
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const filename = `${this.currentUser.id}/screenshot_${timestamp}.png`;
-      
-      const { data: uploadData, error: uploadError } = await this.supabase.storage
-        .from('screenshots')
-        .upload(filename, arrayBuffer);
-      
-      if (uploadError) {
-        console.error('❌ Screenshot upload error:', uploadError);
-        return;
+
+      console.log('📸 Saving screenshot:', `(${(arrayBuffer.byteLength / 1024).toFixed(2)} KB)`);
+
+      let primaryUrl = null;
+      let backupUrl = null;
+
+      // Try Backblaze first (if enabled)
+      if (this.backblazeEnabled) {
+        console.log('📤 Attempting Backblaze upload for screenshot...');
+        try {
+          const { data: backblazeData, error: backblazeError } = await window.electronAPI.backblazeStorage('upload', {
+            bucket: 'screenshots',
+            path: filename,
+            file: arrayBuffer
+          });
+
+          if (!backblazeError && backblazeData) {
+            primaryUrl = backblazeData.publicUrl;
+            console.log('✅ SUCCESS: Screenshot uploaded to Backblaze (primary)');
+            console.log('🔗 Backblaze URL:', primaryUrl);
+          } else {
+            console.error('❌ FAILED: Backblaze screenshot upload error:', backblazeError);
+          }
+        } catch (error) {
+          console.error('❌ FAILED: Backblaze screenshot upload exception:', error.message);
+          console.warn('⚠️ Falling back to Supabase as primary...');
+        }
+      } else {
+        console.log('ℹ️ Backblaze disabled, using Supabase only');
       }
+
+      // Always upload to Supabase (as backup or primary)
+      let uploadData, uploadError;
       
-      const urlData = await this.supabase.storage
-        .from('screenshots')
-        .getPublicUrl(filename);
-      
+      try {
+        const uploadResult = await this.supabase.storage
+          .from('screenshots')
+          .upload(filename, arrayBuffer);
+        uploadData = uploadResult.data;
+        uploadError = uploadResult.error;
+      } catch (error) {
+        uploadError = error;
+      }
+
+      // If token expired, refresh and retry once
+      if (uploadError && (uploadError.message?.includes('exp') || uploadError.message?.includes('token'))) {
+        console.log('🔄 Token expired, refreshing and retrying screenshot upload...');
+        await this.refreshAuthToken();
+        
+        const retryResult = await this.supabase.storage
+          .from('screenshots')
+          .upload(filename, arrayBuffer);
+        uploadData = retryResult.data;
+        uploadError = retryResult.error;
+      }
+
+      if (uploadError) {
+        console.error('❌ FAILED: Supabase screenshot upload error:', uploadError);
+        // If both failed, return
+        if (!primaryUrl) {
+          console.error('💥 CRITICAL: Both Backblaze and Supabase failed for screenshot');
+          return;
+        } else {
+          console.warn('⚠️ Supabase backup failed, but Backblaze succeeded');
+        }
+      } else {
+        const urlData = await this.supabase.storage
+          .from('screenshots')
+          .getPublicUrl(filename);
+
+        backupUrl = urlData.publicUrl;
+
+        if (!primaryUrl) {
+          // If Backblaze failed/disabled, use Supabase as primary
+          primaryUrl = backupUrl;
+          console.log('✅ SUCCESS: Screenshot uploaded to Supabase (primary)');
+          console.log('🔗 Supabase URL:', backupUrl);
+        } else {
+          console.log('✅ SUCCESS: Screenshot uploaded to Supabase (backup)');
+          console.log('🔗 Backup URL:', backupUrl);
+        }
+      }
+
+      // Save to database with primary URL and backup URL
       await this.supabase
         .from('screenshots')
         .insert([{
@@ -809,13 +957,15 @@ class WorkInvigilatorApp {
           organization_id: this.organizationId,
           session_id: this.currentSessionId,
           filename: filename,
-          file_url: urlData.publicUrl
+          file_url: primaryUrl,
+          backup_file_url: backupUrl,
+          storage_provider: this.backblazeEnabled ? 'backblaze' : 'supabase'
         }]);
-      
-      console.log('✅ Screenshot saved');
-      
+
+      console.log(`💾 Screenshot saved to database (primary: ${this.backblazeEnabled ? 'Backblaze' : 'Supabase'})`);
+
     } catch (error) {
-      console.error('❌ Save screenshot error:', error);
+      console.error('💥 Save screenshot error:', error);
     }
   }
   

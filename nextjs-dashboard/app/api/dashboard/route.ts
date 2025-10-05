@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all active sessions (employees who are punched in)
-    const { data: activeSessions } = await supabaseAdmin
+    let { data: activeSessions } = await supabaseAdmin
       .from('recording_sessions')
       .select('id, user_id, session_start_time, total_duration_seconds')
       .eq('organization_id', organizationId)
@@ -50,14 +50,33 @@ export async function GET(request: NextRequest) {
       activeUserIds = [...new Set(activeSessions.map(s => s.user_id))]
     } else {
       // Fallback to screenshot-based detection (for backward compatibility)
-      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000)
       const { data: recentScreenshots } = await supabaseAdmin
         .from('screenshots')
         .select('user_id, created_at')
         .eq('organization_id', organizationId)
-        .gte('created_at', tenMinutesAgo.toISOString())
+        .gte('created_at', twoMinutesAgo.toISOString())
 
       activeUserIds = [...new Set((recentScreenshots || []).map(s => s.user_id))]
+      
+      // Create synthetic active sessions from screenshot activity
+      if (activeUserIds.length > 0) {
+        // Group screenshots by user and get earliest timestamp for each
+        const userScreenshotMap = new Map<string, string>()
+        recentScreenshots?.forEach(s => {
+          if (!userScreenshotMap.has(s.user_id) || s.created_at < userScreenshotMap.get(s.user_id)!) {
+            userScreenshotMap.set(s.user_id, s.created_at)
+          }
+        })
+        
+        // Create synthetic sessions
+        activeSessions = activeUserIds.map((userId, index) => ({
+          id: `synthetic_${userId}`,
+          user_id: userId,
+          session_start_time: userScreenshotMap.get(userId) || new Date().toISOString(),
+          total_duration_seconds: 0
+        }))
+      }
     }
 
     // Get profiles for active users
@@ -281,7 +300,8 @@ export async function GET(request: NextRequest) {
 
       // Key Performance Indicators
       kpis: {
-        activeSessions: activeEmployees,
+        activeSessions: activeSessions?.length || 0,
+        activeEmployees: activeEmployees,
         totalEmployees,
         avgProductivity,
         avgFocusHours,

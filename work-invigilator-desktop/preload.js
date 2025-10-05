@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Supabase configuration
   getSupabaseConfig: () => ipcRenderer.invoke('get-supabase-config'),
 
+  // Backblaze configuration
+  getBackblazeConfig: () => ipcRenderer.invoke('get-backblaze-config'),
+
   // Screenshot capture
   captureScreenshot: () => ipcRenderer.invoke('capture-screenshot'),
 
@@ -24,6 +27,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   supabaseAuth: (method, params) => ipcRenderer.invoke('supabase-auth', method, params),
   supabaseQuery: (table, operation, params) => ipcRenderer.invoke('supabase-query', table, operation, params),
   supabaseStorage: (operation, params) => ipcRenderer.invoke('supabase-storage', operation, params),
+
+  // Backblaze operations
+  backblazeStorage: (operation, params) => ipcRenderer.invoke('backblaze-storage', operation, params),
 
   // Platform info
   platform: process.platform,

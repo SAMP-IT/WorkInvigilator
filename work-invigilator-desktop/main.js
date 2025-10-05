@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, desktopCapturer, Tray, Menu } = require('electron');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 let mainWindow;
 let tray;
@@ -12,9 +14,38 @@ const SUPABASE_CONFIG = {
   anon_key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxbm1pbGtnbHRjb29xenl0a3h5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2MDYzODcsImV4cCI6MjA3NDE4MjM4N30.Et5msR4pTjO1jZdQ35pUeWYdXAdCbM8mjqSrzzaLAEs'
 };
 
+// Backblaze B2 configuration (hardcoded)
+const BACKBLAZE_CONFIG = {
+  endpoint: 's3.us-east-005.backblazeb2.com',
+  region: 'us-east-005',
+  keyId: '0057242535e05d00000000001',
+  applicationKey: 'K005EdyoXAOL3IEstJchDkKzzM5eE+Y',
+  buckets: {
+    screenshots: 'workinvigilator-screenshots',
+    audioRecordings: 'workinvigilator-audio-recordings'
+  },
+  enabled: true // Set to false to disable Backblaze and use only Supabase
+};
+
 // Initialize Supabase in main process
 supabaseClient = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anon_key);
 console.log('✅ Supabase initialized in main process');
+
+// Initialize Backblaze S3 client
+let s3Client = null;
+if (BACKBLAZE_CONFIG.enabled && BACKBLAZE_CONFIG.keyId && BACKBLAZE_CONFIG.applicationKey) {
+  s3Client = new S3Client({
+    endpoint: `https://${BACKBLAZE_CONFIG.endpoint}`,
+    region: BACKBLAZE_CONFIG.region,
+    credentials: {
+      accessKeyId: BACKBLAZE_CONFIG.keyId,
+      secretAccessKey: BACKBLAZE_CONFIG.applicationKey
+    }
+  });
+  console.log('✅ Backblaze S3 client initialized');
+} else {
+  console.log('ℹ️ Backblaze disabled or not configured');
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -221,6 +252,11 @@ ipcMain.handle('get-supabase-config', () => {
   return SUPABASE_CONFIG;
 });
 
+// Get Backblaze configuration
+ipcMain.handle('get-backblaze-config', () => {
+  return BACKBLAZE_CONFIG;
+});
+
 // Capture screenshot
 ipcMain.handle('capture-screenshot', async () => {
   try {
@@ -354,9 +390,9 @@ ipcMain.handle('supabase-storage', async (event, operation, params) => {
         }
       });
     }
-    
+
     const storage = client.storage.from(params.bucket);
-    
+
     switch (operation) {
       case 'upload':
         // Convert ArrayBuffer to Buffer for Supabase
@@ -365,11 +401,62 @@ ipcMain.handle('supabase-storage', async (event, operation, params) => {
           contentType: params.path.endsWith('.png') ? 'image/png' : 'audio/webm',
           upsert: false
         });
-        
+
       case 'getPublicUrl':
         const urlResult = storage.getPublicUrl(params.path);
         return urlResult;
-        
+
+      default:
+        return { error: { message: 'Unknown storage operation' } };
+    }
+  } catch (error) {
+    return { error: { message: error.message } };
+  }
+});
+
+// Backblaze B2 Storage handlers
+ipcMain.handle('backblaze-storage', async (event, operation, params) => {
+  try {
+    if (!s3Client) {
+      return { error: { message: 'Backblaze not configured' } };
+    }
+
+    switch (operation) {
+      case 'upload':
+        const buffer = Buffer.from(params.file);
+        const contentType = params.path.endsWith('.png') ? 'image/png' : 'audio/webm';
+
+        // Determine which bucket to use based on the Supabase bucket name
+        const bucketName = params.bucket === 'screenshots'
+          ? BACKBLAZE_CONFIG.buckets.screenshots
+          : BACKBLAZE_CONFIG.buckets.audioRecordings;
+
+        const putCommand = new PutObjectCommand({
+          Bucket: bucketName,
+          Key: params.path,
+          Body: buffer,
+          ContentType: contentType
+        });
+
+        await s3Client.send(putCommand);
+
+        // Generate signed URL (valid for 7 days = 604800 seconds, max allowed by S3 signature v4)
+        // For private buckets
+        const getCommand = new GetObjectCommand({
+          Bucket: bucketName,
+          Key: params.path
+        });
+
+        const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 604800 });
+
+        return {
+          data: {
+            path: params.path,
+            publicUrl: signedUrl
+          },
+          error: null
+        };
+
       default:
         return { error: { message: 'Unknown storage operation' } };
     }
