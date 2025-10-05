@@ -55,8 +55,7 @@ function HomePageContent() {
     } else if (!authLoading) {
       setLoading(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.organization_id, authLoading, searchParams?.get('period')]);
+  }, [profile?.organization_id, authLoading, searchParams]);
 
   async function loadData() {
     setLoading(true);

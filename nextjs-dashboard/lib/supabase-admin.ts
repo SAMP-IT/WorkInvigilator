@@ -34,8 +34,7 @@ function getSupabaseAdminClient() {
 export const supabaseAdmin = new Proxy({} as SupabaseClient, {
   get(target, prop) {
     const client = getSupabaseAdminClient()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const value = (client as any)[prop]
+    const value = Reflect.get(client, prop)
     return typeof value === 'function' ? value.bind(client) : value
   }
 })

@@ -49,6 +49,8 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organizationId)
       .order('session_start_time', { ascending: false })
 
+    let formattedSessions
+
     // If no sessions exist, create sessions from screenshots
     if (!sessions || sessions.length === 0) {
       // Get all screenshots grouped by user and date
@@ -107,9 +109,9 @@ export async function GET(request: NextRequest) {
       })
 
       // Use synthetic sessions instead of database sessions
-      const formattedSessions = syntheticSessions
+      formattedSessions = syntheticSessions
     } else {
-      var formattedSessions = sessions
+      formattedSessions = sessions
     }
 
     // Get unique user IDs to fetch profiles

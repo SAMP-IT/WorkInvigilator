@@ -108,28 +108,44 @@ export default function ScreenshotsPage() {
     }
   };
 
-  const handleDownload = (screenshotId: string) => {
+  const handleDownload = async (screenshotId: string) => {
     const screenshot = displayedScreenshots.find(s => s.id === screenshotId);
     if (!screenshot?.url) return;
 
-    // Create a temporary link and trigger download
-    const a = document.createElement('a');
-    a.href = screenshot.url;
-    a.download = screenshot.filename || `screenshot_${screenshot.timestamp}.png`;
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    try {
+      // Fetch the file as a blob to avoid CORS issues and prevent opening in new tab
+      const response = await fetch(screenshot.url);
+      const blob = await response.blob();
+      
+      // Create a blob URL and download
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = screenshot.filename || `screenshot_${screenshot.timestamp}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      // Clean up the blob URL
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Download failed:', error);
+      // Fallback to direct download
+      window.location.href = screenshot.url;
+    }
   };
 
-  const handleDownloadAll = () => {
-    displayedScreenshots.forEach((screenshot, index) => {
+  const handleDownloadAll = async () => {
+    for (let i = 0; i < displayedScreenshots.length; i++) {
+      const screenshot = displayedScreenshots[i];
       if (screenshot.url) {
-        setTimeout(() => {
-          handleDownload(screenshot.id);
-        }, index * 500); // Stagger downloads by 500ms
+        await handleDownload(screenshot.id);
+        // Add small delay between downloads
+        if (i < displayedScreenshots.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
-    });
+    }
   };
 
   return (
