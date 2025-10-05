@@ -23,6 +23,7 @@ class WorkInvigilatorApp {
     this.currentChunkStartTime = null;
     this.CHUNK_DURATION = 5 * 60 * 1000; // 5 minutes
     this.chunkInterval = null;
+    this.isStoppingForChunk = false;
     
     // Screenshot
     this.screenshotInterval = null;
@@ -568,12 +569,25 @@ class WorkInvigilatorApp {
           await this.saveCurrentChunk();
         }
         
-        if (this.chunkInterval) {
-          clearInterval(this.chunkInterval);
-          this.chunkInterval = null;
+        // Only clear interval and stop tracks if this is a final stop (not a chunk save)
+        if (!this.isStoppingForChunk) {
+          if (this.chunkInterval) {
+            clearInterval(this.chunkInterval);
+            this.chunkInterval = null;
+          }
+          
+          stream.getTracks().forEach(track => track.stop());
+        } else {
+          // Reset flag and restart recording for next chunk
+          this.isStoppingForChunk = false;
+          this.audioChunks = [];
+          this.currentChunkStartTime = Date.now();
+          
+          // Restart recording immediately
+          if (this.mediaRecorder) {
+            this.mediaRecorder.start();
+          }
         }
-        
-        stream.getTracks().forEach(track => track.stop());
       };
       
       // Start recording without timeslice to get complete WebM files
@@ -582,17 +596,10 @@ class WorkInvigilatorApp {
       // Auto-save chunks every 5 minutes by stopping and restarting
       this.chunkInterval = setInterval(async () => {
         if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-          // Stop will trigger onstop which saves the chunk
+          // Set flag to indicate this is a chunk save, not final stop
+          this.isStoppingForChunk = true;
+          // Stop will trigger onstop which saves the chunk and restarts
           this.mediaRecorder.stop();
-          
-          // Restart recording after a short delay
-          setTimeout(() => {
-            if (this.mediaRecorder) {
-              this.audioChunks = [];
-              this.currentChunkStartTime = Date.now();
-              this.mediaRecorder.start();
-            }
-          }, 100);
         }
       }, this.CHUNK_DURATION);
       
@@ -607,6 +614,9 @@ class WorkInvigilatorApp {
   async stopRecording() {
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       return new Promise((resolve) => {
+        // Ensure this is treated as a final stop, not a chunk save
+        this.isStoppingForChunk = false;
+        
         this.mediaRecorder.onstop = async (event) => {
           if (this.audioChunks.length > 0) {
             await this.saveCurrentChunk();
