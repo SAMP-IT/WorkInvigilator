@@ -6,7 +6,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const employeeId = searchParams.get('employeeId')
     const organizationId = searchParams.get('organizationId')
-    const limit = parseInt(searchParams.get('limit') || '20')
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
 
@@ -38,10 +37,9 @@ export async function GET(request: NextRequest) {
       query = query.lt('created_at', endDateTime.toISOString())
     }
 
-    // Apply ordering and limit
+    // Apply ordering
     query = query
       .order('created_at', { ascending: false })
-      .limit(limit)
 
     const { data: screenshots } = await query
 
@@ -113,7 +111,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       screenshots: formattedScreenshots,
       totalCount: totalCount || 0,
-      todayCount: formattedScreenshots.length // Simplified - all are from recent activity
+      todayCount: totalCount || 0
     })
 
   } catch (error) {

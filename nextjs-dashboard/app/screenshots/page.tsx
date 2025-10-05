@@ -28,6 +28,7 @@ export default function ScreenshotsPage() {
   const { profile } = useAuth();
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
@@ -81,6 +82,7 @@ export default function ScreenshotsPage() {
 
       const screenshotsData = await screenshotsResponse.json();
       setScreenshots(screenshotsData.screenshots || []);
+      setTotalCount(screenshotsData.totalCount || 0);
     } catch (err) {
       setError('Failed to load screenshots. Please try again.');
     } finally {
@@ -141,7 +143,7 @@ export default function ScreenshotsPage() {
           </div>
           <div className="flex items-center space-x-3">
             <Badge variant="info">
-              {loading ? '...' : screenshots.length} Total
+              {loading ? '...' : totalCount} Total
             </Badge>
             <Button variant="outline" onClick={handleDownloadAll} disabled={displayedScreenshots.length === 0}>
               Download All
@@ -232,7 +234,7 @@ export default function ScreenshotsPage() {
         <Card>
           <CardHeader>
             <CardTitle>
-              {selectedEmployee === 'all' ? 'Recent Screenshots (Top 10)' : `Screenshots - ${selectedEmployeeName}`}
+              {selectedEmployee === 'all' ? 'Recent Screenshots' : `Screenshots - ${selectedEmployeeName}`}
             </CardTitle>
           </CardHeader>
           <CardContent>
