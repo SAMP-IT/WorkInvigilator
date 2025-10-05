@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const employeeId = searchParams.get('employeeId')
     const organizationId = searchParams.get('organizationId')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const limit = parseInt(searchParams.get('limit') || '1000')
     const offset = parseInt(searchParams.get('offset') || '0')
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')

@@ -74,7 +74,7 @@ function AudioPageContent() {
       }
 
       // Use the new centralized audio API with organization filter and date range
-      let url = `/api/audio?employeeId=${employeeId}&organizationId=${profile.organization_id}&limit=50`;
+      let url = `/api/audio?employeeId=${employeeId}&organizationId=${profile.organization_id}`;
       if (startDate) url += `&startDate=${startDate}`;
       if (endDate) url += `&endDate=${endDate}`;
 
