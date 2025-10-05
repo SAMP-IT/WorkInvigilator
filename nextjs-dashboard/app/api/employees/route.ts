@@ -41,11 +41,26 @@ export async function GET(request: NextRequest) {
     // Calculate real metrics for each employee
     const employeesWithMetrics = await Promise.all(
       employees.map(async (employee) => {
-        // Get last 7 days of sessions for productivity calculation
+        // Get last 7 days of data
         const sevenDaysAgo = new Date()
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
-        // Get employee sessions from last 7 days
+        // Get screenshots from last 7 days (as primary activity indicator)
+        const { data: screenshots } = await supabaseAdmin
+          .from('screenshots')
+          .select('created_at')
+          .eq('user_id', employee.id)
+          .gte('created_at', sevenDaysAgo.toISOString())
+          .order('created_at', { ascending: false })
+
+        // Get audio recordings from last 7 days
+        const { data: audioChunks } = await supabaseAdmin
+          .from('audio_chunks')
+          .select('created_at, duration_seconds')
+          .eq('user_id', employee.id)
+          .gte('created_at', sevenDaysAgo.toISOString())
+
+        // Get employee sessions from last 7 days (if exists)
         const { data: sessions } = await supabaseAdmin
           .from('recording_sessions')
           .select('*')
@@ -60,16 +75,19 @@ export async function GET(request: NextRequest) {
           .eq('user_id', employee.id)
           .gte('date', sevenDaysAgo.toISOString().split('T')[0])
 
-        // Check if user has active session
-        const { data: activeSessions } = await supabaseAdmin
-          .from('recording_sessions')
-          .select('*')
-          .eq('user_id', employee.id)
-          .is('session_end_time', null)
-          .limit(1)
+        // Calculate total work time from sessions OR estimate from screenshots/audio
+        let totalWorkSeconds = sessions?.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0) || 0
 
-        // Calculate metrics
-        const totalWorkSeconds = sessions?.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0) || 0
+        // If no sessions, estimate work time from audio chunks
+        if (totalWorkSeconds === 0 && audioChunks && audioChunks.length > 0) {
+          totalWorkSeconds = audioChunks.reduce((sum, a) => sum + (a.duration_seconds || 0), 0)
+        }
+
+        // If still no work time, estimate from screenshot count (assume 1 screenshot every 2 minutes)
+        if (totalWorkSeconds === 0 && screenshots && screenshots.length > 0) {
+          totalWorkSeconds = screenshots.length * 120 // 2 minutes per screenshot
+        }
+
         const totalFocusSeconds = metrics?.reduce((sum, m) => sum + (m.focus_time_seconds || 0), 0) ||
           Math.floor(totalWorkSeconds * 0.85) // Fallback: assume 85% focus time
 
@@ -82,36 +100,70 @@ export async function GET(request: NextRequest) {
           .select('break_duration_ms')
           .eq('user_id', employee.id)
           .eq('organization_id', organizationId)
-          .gte('break_date', sevenDaysAgo)
+          .gte('break_date', sevenDaysAgo.toISOString().split('T')[0])
 
         const totalBreakMs = breakSessions?.reduce((sum, b) => sum + (b.break_duration_ms || 0), 0) || 0
         const totalBreakSeconds = Math.floor(totalBreakMs / 1000)
-        const avgBreakHDay = totalBreakSeconds > 0 ?
-          Number((totalBreakSeconds / (7 * 3600)).toFixed(1)) : 0
+        const totalBreakHours = totalBreakSeconds / 3600
 
-        const avgSessionMin = sessions && sessions.length > 0 ?
-          Math.round((totalWorkSeconds / sessions.length) / 60) : 0
+        // Calculate average break hours per day (total break hours / number of days with breaks)
+        const avgBreakHDay = breakSessions && breakSessions.length > 0 ?
+          Number((totalBreakHours / 7).toFixed(1)) : 0
 
-        // Determine last active time
-        let lastActive = 'Never'
+        // Calculate average session from sessions OR estimate from work time
+        let avgSessionMin = 0
         if (sessions && sessions.length > 0) {
-          const lastSession = sessions[0]
-          const lastActiveTime = new Date(lastSession.session_start_time)
+          avgSessionMin = Math.round((totalWorkSeconds / sessions.length) / 60)
+        } else if (totalWorkSeconds > 0) {
+          // Estimate based on typical work sessions (assume multiple sessions per day)
+          avgSessionMin = Math.round(totalWorkSeconds / 60 / 7) // Average per day
+        }
+
+        // Determine last active time from screenshots, audio, or sessions
+        let lastActive = 'Never'
+        let lastActiveTime: Date | null = null
+
+        if (screenshots && screenshots.length > 0) {
+          lastActiveTime = new Date(screenshots[0].created_at)
+        } else if (audioChunks && audioChunks.length > 0) {
+          lastActiveTime = new Date(audioChunks[0].created_at)
+        } else if (sessions && sessions.length > 0) {
+          lastActiveTime = new Date(sessions[0].session_start_time)
+        }
+
+        if (lastActiveTime) {
           const now = new Date()
           const hoursDiff = Math.round((now.getTime() - lastActiveTime.getTime()) / (1000 * 60 * 60))
 
           if (hoursDiff < 1) {
-            lastActive = 'Less than 1 hour ago'
+            lastActive = 'Just now'
           } else if (hoursDiff < 24) {
-            lastActive = `${hoursDiff} hours ago`
+            lastActive = `${hoursDiff} hour${hoursDiff > 1 ? 's' : ''} ago`
           } else {
             const daysDiff = Math.round(hoursDiff / 24)
             lastActive = `${daysDiff} day${daysDiff > 1 ? 's' : ''} ago`
           }
         }
 
-        // Determine status (online if has active session)
-        const status = activeSessions && activeSessions.length > 0 ? 'online' : 'offline'
+        // Determine status - prioritize punch-in status, fallback to recent activity
+        let status: 'online' | 'offline' = 'offline'
+
+        // Check if user has active session (is punched in)
+        const { data: activeSession } = await supabaseAdmin
+          .from('recording_sessions')
+          .select('id')
+          .eq('user_id', employee.id)
+          .is('session_end_time', null) // NULL = punched in
+          .limit(1)
+
+        if (activeSession && activeSession.length > 0) {
+          status = 'online'
+        } else {
+          // Fallback to screenshot-based detection (within last 10 minutes)
+          const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+          const isRecentlyActive = lastActiveTime && lastActiveTime > tenMinutesAgo
+          status = isRecentlyActive ? 'online' : 'offline'
+        }
 
         return {
           id: employee.id,

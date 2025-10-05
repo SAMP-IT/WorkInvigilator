@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -38,13 +39,21 @@ interface Employee {
   shiftEndTime?: string;
 }
 
-export default function EmployeesPage() {
+interface Screenshot {
+  id: string;
+  url: string;
+  created_at: string;
+}
+
+function EmployeesPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { profile } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || "");
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -52,6 +61,7 @@ export default function EmployeesPage() {
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [employeeScreenshots, setEmployeeScreenshots] = useState<Screenshot[]>([]);
 
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
@@ -102,6 +112,37 @@ export default function EmployeesPage() {
       setLoading(false);
     }
   };
+
+  const loadEmployeeScreenshots = async (employeeId: string) => {
+    try {
+      if (!profile?.organization_id) return;
+
+      const response = await fetch(
+        `/api/screenshots?employeeId=${employeeId}&organizationId=${profile.organization_id}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch screenshots");
+      }
+
+      const data = await response.json();
+      const screenshots = (data.screenshots || []).slice(0, 4).map((s: any) => ({
+        id: s.id,
+        url: s.url,
+        created_at: s.timestamp
+      }));
+      setEmployeeScreenshots(screenshots);
+    } catch (err) {
+      console.error("Failed to load employee screenshots");
+      setEmployeeScreenshots([]);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedEmployee) {
+      loadEmployeeScreenshots(selectedEmployee);
+    }
+  }, [selectedEmployee]);
 
   const formatProductivity = (value: number) => `${(value || 0).toFixed(1)}%`;
   const formatHours = (value: number) => `${(value || 0).toFixed(1)}h`;
@@ -501,7 +542,7 @@ export default function EmployeesPage() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      {employee.role === "ADMIN" ? (
+                      {employee.role?.toLowerCase() === "admin" ? (
                         <Badge variant="warning" size="sm">
                           ADMIN
                         </Badge>
@@ -597,11 +638,11 @@ export default function EmployeesPage() {
                       <p className="text-ink-muted">{employee.email}</p>
                       <Badge
                         variant={
-                          employee.role === "ADMIN" ? "warning" : "default"
+                          employee.role?.toLowerCase() === "admin" ? "warning" : "default"
                         }
                         className="mt-2"
                       >
-                        {employee.role}
+                        {employee.role?.toUpperCase()}
                       </Badge>
                     </div>
 
@@ -629,23 +670,54 @@ export default function EmployeesPage() {
                         Recent Screenshots
                       </h4>
                       <div className="grid grid-cols-2 gap-2">
-                        {Array.from({ length: 4 }).map((_, i) => (
-                          <div
-                            key={i}
-                            className="aspect-video bg-raised rounded border border-line flex items-center justify-center"
-                          >
-                            <span className="text-ink-muted text-xs">📸</span>
-                          </div>
-                        ))}
+                        {employeeScreenshots.length > 0 ? (
+                          employeeScreenshots.map((screenshot) => (
+                            <div
+                              key={screenshot.id}
+                              className="aspect-video bg-raised rounded border border-line overflow-hidden cursor-pointer hover:border-primary transition-colors"
+                              onClick={() => router.push('/screenshots')}
+                            >
+                              <img
+                                src={screenshot.url}
+                                alt="Screenshot"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = 'none';
+                                  target.parentElement!.classList.add('flex', 'items-center', 'justify-center');
+                                  target.parentElement!.innerHTML = '<span class="text-ink-muted text-xs">📸</span>';
+                                }}
+                              />
+                            </div>
+                          ))
+                        ) : (
+                          Array.from({ length: 4 }).map((_, i) => (
+                            <div
+                              key={i}
+                              className="aspect-video bg-raised rounded border border-line flex items-center justify-center"
+                            >
+                              <span className="text-ink-muted text-xs">📸</span>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
 
                     {/* Actions */}
                     <div className="flex space-x-2">
-                      <Button variant="outline" className="flex-1">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => router.push('/sessions')}
+                      >
                         View Timeline
                       </Button>
-                      <Button className="flex-1">Export Data</Button>
+                      <Button
+                        className="flex-1"
+                        onClick={() => router.push('/screenshots')}
+                      >
+                        View Screenshots
+                      </Button>
                     </div>
                   </div>
                 );
@@ -669,5 +741,13 @@ export default function EmployeesPage() {
         </Modal>
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function EmployeesPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+      <EmployeesPageContent />
+    </Suspense>
   );
 }

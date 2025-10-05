@@ -433,15 +433,6 @@ export default function ScreenshotsPage() {
                     <Button onClick={() => selectedScreenshot && handleDownload(selectedScreenshot)}>
                       Download Original
                     </Button>
-                    <Button variant="outline">
-                      View Metadata
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => selectedScreenshot && handleDelete(selectedScreenshot)}
-                    >
-                      Delete
-                    </Button>
                   </div>
                 </div>
               </div>

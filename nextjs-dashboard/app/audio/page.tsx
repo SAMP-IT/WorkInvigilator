@@ -307,15 +307,59 @@ function AudioPageContent() {
                                   <p className="text-xs text-ink-muted">{chunk.filename}</p>
                                 </div>
                                 {chunk.file_url && (
-                                  <audio
-                                    controls
-                                    className="w-48"
-                                    preload="metadata"
-                                  >
-                                    <source src={chunk.file_url} type="audio/webm" />
-                                    <source src={chunk.file_url} type="audio/wav" />
-                                    Your browser does not support the audio element.
-                                  </audio>
+                                  <div className="flex items-center space-x-2">
+                                    <audio
+                                      controls
+                                      className="w-48"
+                                      preload="metadata"
+                                      src={chunk.file_url}
+                                      onError={(e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
+                                        const audioEl = e.currentTarget;
+                                        console.error('Audio playback error:', {
+                                          url: chunk.file_url,
+                                          error: audioEl.error,
+                                          errorCode: audioEl.error?.code,
+                                          errorMessage: audioEl.error?.message,
+                                          networkState: audioEl.networkState,
+                                          readyState: audioEl.readyState
+                                        });
+                                      }}
+                                    >
+                                      Your browser does not support the audio element.
+                                    </audio>
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          // Fetch the file as a blob to avoid CORS issues
+                                          const response = await fetch(chunk.file_url);
+                                          const blob = await response.blob();
+                                          
+                                          // Create a blob URL and download
+                                          const blobUrl = window.URL.createObjectURL(blob);
+                                          const a = document.createElement('a');
+                                          a.href = blobUrl;
+                                          a.download = chunk.filename;
+                                          document.body.appendChild(a);
+                                          a.click();
+                                          document.body.removeChild(a);
+                                          
+                                          // Clean up the blob URL
+                                          window.URL.revokeObjectURL(blobUrl);
+                                        } catch (error) {
+                                          console.error('Download failed:', error);
+                                          // Fallback to direct download
+                                          window.location.href = chunk.file_url;
+                                        }
+                                      }}
+                                      className="px-3 py-1.5 text-xs font-medium rounded-lg border border-line text-ink-hi hover:bg-surface transition-colors flex items-center space-x-1"
+                                      title="Download audio file"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a 3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                      </svg>
+                                      <span>Download</span>
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             </div>

@@ -86,8 +86,22 @@ export async function GET(request: NextRequest) {
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString())
 
-    // Calculate totals
-    const totalWorkSeconds = sessions?.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0) || 0
+    // Calculate totals - fallback to recording_chunks if no sessions exist
+    let totalWorkSeconds = sessions?.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0) || 0
+    
+    // If no sessions, calculate from recording_chunks
+    if (totalWorkSeconds === 0) {
+      const { data: chunks } = await supabaseAdmin
+        .from('recording_chunks')
+        .select('duration_seconds')
+        .eq('user_id', employeeId)
+        .eq('organization_id', organizationId)
+        .gte('created_at', startDate.toISOString())
+        .lte('created_at', endDate.toISOString())
+      
+      totalWorkSeconds = chunks?.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) || 0
+    }
+    
     const totalFocusSeconds = metrics?.reduce((sum, m) => sum + (m.focus_time_seconds || 0), 0) || Math.floor(totalWorkSeconds * 0.85)
     const avgProductivity = metrics && metrics.length > 0
       ? metrics.reduce((sum, m) => sum + (m.productivity_percentage || 0), 0) / metrics.length
@@ -97,7 +111,15 @@ export async function GET(request: NextRequest) {
     const formatTime = (seconds: number) => {
       const hours = Math.floor(seconds / 3600)
       const minutes = Math.floor((seconds % 3600) / 60)
-      return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
+      const secs = Math.floor(seconds % 60)
+      
+      if (hours > 0) {
+        return `${hours}h ${minutes}m`
+      } else if (minutes > 0) {
+        return `${minutes}m`
+      } else {
+        return `${secs}s`
+      }
     }
 
     // Generate period label
@@ -161,7 +183,7 @@ export async function GET(request: NextRequest) {
       focusTime: formatTime(totalFocusSeconds),
       breakTime: formatTime(totalBreakSeconds),
       productivity: Number(avgProductivity.toFixed(1)),
-      sessionsCount: sessions?.length || 0,
+      sessionsCount: sessions?.length || (totalWorkSeconds > 0 ? 1 : 0),
       screenshotsCount: screenshotsCount || 0,
       breakSessionsCount: breakSessions?.length || 0,
       applications,

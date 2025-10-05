@@ -41,7 +41,23 @@ class RecordingManager {
       this.mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           this.audioChunks.push(event.data);
+          const totalSize = this.audioChunks.reduce((sum, c) => sum + c.size, 0);
+          console.log(`[${new Date().toISOString()}] 📥 Audio data received:`, {
+            chunkSize: (event.data.size / 1024).toFixed(2) + 'KB',
+            totalChunks: this.audioChunks.length,
+            totalSize: (totalSize / 1024).toFixed(2) + 'KB'
+          });
         }
+      };
+
+      // Add error handler for MediaRecorder
+      this.mediaRecorder.onerror = (event) => {
+        console.error(`[${new Date().toISOString()}] ❌ MediaRecorder ERROR:`, {
+          error: event.error,
+          state: this.mediaRecorder.state,
+          chunkCount: this.audioChunks.length,
+          elapsedTime: Math.floor((Date.now() - this.audioStartTime) / 1000) + 's'
+        });
       };
 
       this.mediaRecorder.onstop = async () => {
@@ -68,14 +84,46 @@ class RecordingManager {
       const CHUNK_DURATION = 5 * 60 * 1000;
       console.log(`⏰ Setting up chunking interval: ${CHUNK_DURATION/1000}s`);
       this.chunkInterval = setInterval(async () => {
+        console.log(`[${new Date().toISOString()}] ⏰ Chunk interval triggered:`, {
+          isRecording: this.isRecording,
+          chunksReady: this.audioChunks.length,
+          sessionChunksSaved: this.sessionChunks.length,
+          elapsedSinceLastSave: Math.floor((Date.now() - this.currentChunkStartTime) / 1000) + 's'
+        });
+
         if (this.isRecording && this.audioChunks.length > 0) {
-          console.log('💾 Saving current chunk...');
+          console.log(`[${new Date().toISOString()}] 💾 Starting chunk save process...`);
+          const saveStartTime = Date.now();
+
           await this.saveCurrentChunk();
+
+          const saveDuration = Date.now() - saveStartTime;
+          console.log(`[${new Date().toISOString()}] ✅ Chunk save completed in ${saveDuration}ms`);
+
           this.audioChunks = [];
           this.currentChunkStartTime = Date.now();
-          console.log('🔄 Started new chunk at:', new Date(this.currentChunkStartTime).toLocaleTimeString());
+          console.log(`[${new Date().toISOString()}] 🔄 Started new chunk at:`, new Date().toLocaleTimeString());
+        } else {
+          console.warn(`[${new Date().toISOString()}] ⚠️ Chunk interval skipped:`, {
+            isRecording: this.isRecording,
+            chunksReady: this.audioChunks.length
+          });
         }
       }, CHUNK_DURATION);
+
+      // Add health check logging every 30 seconds
+      setInterval(() => {
+        if (this.mediaRecorder) {
+          console.log(`[${new Date().toISOString()}] 📊 MediaRecorder Health Check:`, {
+            state: this.mediaRecorder.state,
+            isRecording: this.isRecording,
+            chunksInMemory: this.audioChunks.length,
+            sessionChunksSaved: this.sessionChunks.length,
+            elapsedTime: Math.floor((Date.now() - this.audioStartTime) / 1000) + 's',
+            memoryUsage: performance.memory ? Math.floor(performance.memory.usedJSHeapSize / 1024 / 1024) + 'MB' : 'N/A'
+          });
+        }
+      }, 30000); // Every 30 seconds
 
       this.mainApp.updateAudioStatus('Recording...');
       this.startAudioTimer();
@@ -136,7 +184,25 @@ class RecordingManager {
   }
 
   async saveCurrentChunk() {
-    if (!this.mainApp.auth.supabaseUrl || !this.mainApp.auth.supabaseKey || !this.mainApp.currentUser || this.audioChunks.length === 0) {
+    const logPrefix = `[${new Date().toISOString()}] [saveCurrentChunk]`;
+
+    console.log(`${logPrefix} 🚀 Starting chunk save process...`);
+
+    // Validation checks with detailed logging
+    if (!this.mainApp.auth.supabaseUrl) {
+      console.error(`${logPrefix} ❌ No Supabase URL configured`);
+      return;
+    }
+    if (!this.mainApp.auth.supabaseKey) {
+      console.error(`${logPrefix} ❌ No Supabase key configured`);
+      return;
+    }
+    if (!this.mainApp.currentUser) {
+      console.error(`${logPrefix} ❌ No current user`);
+      return;
+    }
+    if (this.audioChunks.length === 0) {
+      console.warn(`${logPrefix} ⚠️ No audio chunks to save`);
       return;
     }
 
@@ -147,18 +213,50 @@ class RecordingManager {
       const chunkNumber = this.sessionChunks.length + 1;
       const filename = `${this.mainApp.currentUser.id}/chunk_${chunkNumber}_${timestamp}.webm`;
 
+      console.log(`${logPrefix} 📦 Chunk prepared:`, {
+        chunkNumber,
+        filename,
+        sizeKB: (chunkBlob.size / 1024).toFixed(2),
+        durationSeconds: chunkDuration,
+        audioChunksCount: this.audioChunks.length
+      });
+
+      // Upload to Supabase Storage
+      console.log(`${logPrefix} 📤 Uploading to Supabase storage...`);
+      const uploadStartTime = Date.now();
+
       const { data: uploadData, error: uploadError } = await this.mainApp.supabase.storage
         .from('audio-recordings')
         .upload(filename, chunkBlob);
 
+      const uploadDuration = Date.now() - uploadStartTime;
+
       if (uploadError) {
-        console.error('Chunk upload error:', uploadError);
+        console.error(`${logPrefix} ❌ Storage upload FAILED (${uploadDuration}ms):`, {
+          error: uploadError,
+          errorMessage: uploadError.message,
+          errorCode: uploadError.statusCode,
+          filename,
+          size: chunkBlob.size
+        });
         return;
       }
 
+      console.log(`${logPrefix} ✅ Storage upload SUCCESS (${uploadDuration}ms):`, {
+        filename,
+        uploadData
+      });
+
+      // Get public URL
       const { data: urlData } = this.mainApp.supabase.storage
         .from('audio-recordings')
         .getPublicUrl(filename);
+
+      console.log(`${logPrefix} 🔗 Public URL generated:`, urlData.publicUrl);
+
+      // Insert database record
+      console.log(`${logPrefix} 💾 Inserting database record...`);
+      const dbStartTime = Date.now();
 
       const { error: dbError } = await this.mainApp.supabase
         .from('recording_chunks')
@@ -173,8 +271,16 @@ class RecordingManager {
           chunk_start_time: new Date(this.currentChunkStartTime).toISOString()
         }]);
 
+      const dbDuration = Date.now() - dbStartTime;
+
       if (dbError) {
-        console.error('Chunk database error:', dbError);
+        console.error(`${logPrefix} ❌ Database insert FAILED (${dbDuration}ms):`, {
+          error: dbError,
+          errorMessage: dbError.message,
+          errorCode: dbError.code,
+          chunkNumber,
+          filename
+        });
       } else {
         this.sessionChunks.push({
           chunk_number: chunkNumber,
@@ -182,10 +288,21 @@ class RecordingManager {
           file_url: urlData.publicUrl,
           duration: chunkDuration
         });
+
+        console.log(`${logPrefix} ✅ Database insert SUCCESS (${dbDuration}ms):`, {
+          chunkNumber,
+          totalSessionChunks: this.sessionChunks.length,
+          chunkDuration
+        });
       }
 
     } catch (error) {
-      console.error('Save chunk error:', error);
+      console.error(`${logPrefix} ❌ EXCEPTION during save:`, {
+        error,
+        errorName: error.name,
+        errorMessage: error.message,
+        errorStack: error.stack
+      });
     }
   }
 

@@ -36,15 +36,31 @@ export async function GET(request: NextRequest) {
         startDate.setHours(0, 0, 0, 0)
     }
 
-    // Get all active sessions filtered by organization
+    // Get all active sessions (employees who are punched in)
     const { data: activeSessions } = await supabaseAdmin
       .from('recording_sessions')
       .select('id, user_id, session_start_time, total_duration_seconds')
       .eq('organization_id', organizationId)
-      .is('session_end_time', null)
+      .is('session_end_time', null) // NULL = currently punched in
 
-    // Get profiles for active sessions
-    const activeUserIds = [...new Set((activeSessions || []).map(s => s.user_id))]
+    // Get active user IDs from sessions OR recent screenshots (fallback)
+    let activeUserIds: string[] = []
+    if (activeSessions && activeSessions.length > 0) {
+      // Prioritize punch-in sessions
+      activeUserIds = [...new Set(activeSessions.map(s => s.user_id))]
+    } else {
+      // Fallback to screenshot-based detection (for backward compatibility)
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+      const { data: recentScreenshots } = await supabaseAdmin
+        .from('screenshots')
+        .select('user_id, created_at')
+        .eq('organization_id', organizationId)
+        .gte('created_at', tenMinutesAgo.toISOString())
+
+      activeUserIds = [...new Set((recentScreenshots || []).map(s => s.user_id))]
+    }
+
+    // Get profiles for active users
     const { data: activeProfiles } = await supabaseAdmin
       .from('profiles')
       .select('id, name, email')
@@ -77,6 +93,14 @@ export async function GET(request: NextRequest) {
       .gte('date', startDate.toISOString().split('T')[0])
       .lte('date', endDate.toISOString().split('T')[0])
 
+    // If no sessions exist, get all screenshots to estimate metrics
+    const { data: allPeriodScreenshots } = await supabaseAdmin
+      .from('screenshots')
+      .select('user_id, created_at')
+      .eq('organization_id', organizationId)
+      .gte('created_at', startDate.toISOString())
+      .lte('created_at', endDate.toISOString())
+
     // Get screenshots for the period filtered by organization
     const { data: periodScreenshots } = await supabaseAdmin
       .from('screenshots')
@@ -101,10 +125,16 @@ export async function GET(request: NextRequest) {
 
     // Calculate key metrics
     const totalEmployees = allEmployees?.length || 0
-    const activeEmployees = activeSessions?.length || 0
+    const activeEmployees = activeUserIds.length
 
-    // Calculate average productivity
-    const totalWorkSeconds = periodSessions?.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0) || 0
+    // Calculate average productivity - use screenshots if no sessions
+    let totalWorkSeconds = periodSessions?.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0) || 0
+
+    // If no sessions, estimate from screenshots (2 minutes per screenshot)
+    if (totalWorkSeconds === 0 && allPeriodScreenshots && allPeriodScreenshots.length > 0) {
+      totalWorkSeconds = allPeriodScreenshots.length * 120
+    }
+
     const totalFocusSeconds = periodMetrics?.reduce((sum, m) => sum + (m.focus_time_seconds || 0), 0) ||
       Math.floor(totalWorkSeconds * 0.85) // Fallback calculation
 
@@ -116,8 +146,13 @@ export async function GET(request: NextRequest) {
     const avgFocusHours = Number((totalFocusSeconds / (daysInPeriod * 3600)).toFixed(1))
 
     // Calculate average session duration
-    const avgSessionDuration = periodSessions && periodSessions.length > 0 ?
-      Math.round((totalWorkSeconds / periodSessions.length) / 60) : 0
+    let avgSessionDuration = 0
+    if (periodSessions && periodSessions.length > 0) {
+      avgSessionDuration = Math.round((totalWorkSeconds / periodSessions.length) / 60)
+    } else if (totalWorkSeconds > 0) {
+      // Estimate average session from total work time
+      avgSessionDuration = Math.round(totalWorkSeconds / 60 / daysInPeriod)
+    }
 
     // Get recent active sessions with more details
     const recentActiveSessions = activeSessions?.slice(0, 4).map(session => {
@@ -148,28 +183,50 @@ export async function GET(request: NextRequest) {
     }>()
 
     // Group sessions by employee
-    periodSessions?.forEach(session => {
-      const existing = employeeProductivity.get(session.user_id)
-      const employee = allEmployees?.find(emp => emp.id === session.user_id)
+    if (periodSessions && periodSessions.length > 0) {
+      periodSessions.forEach(session => {
+        const existing = employeeProductivity.get(session.user_id)
+        const employee = allEmployees?.find(emp => emp.id === session.user_id)
 
-      if (employee) {
-        employeeProductivity.set(session.user_id, {
-          name: employee.name || employee.email,
-          email: employee.email,
-          totalSeconds: (existing?.totalSeconds || 0) + (session.total_duration_seconds || 0),
-          focusSeconds: existing?.focusSeconds || 0,
-          productivity: 0 // Will calculate below
-        })
-      }
-    })
+        if (employee) {
+          employeeProductivity.set(session.user_id, {
+            name: employee.name || employee.email,
+            email: employee.email,
+            totalSeconds: (existing?.totalSeconds || 0) + (session.total_duration_seconds || 0),
+            focusSeconds: existing?.focusSeconds || 0,
+            productivity: 0 // Will calculate below
+          })
+        }
+      })
 
-    // Add focus time data
-    periodMetrics?.forEach(metric => {
-      const existing = employeeProductivity.get(metric.user_id)
-      if (existing) {
-        existing.focusSeconds += metric.focus_time_seconds || 0
-      }
-    })
+      // Add focus time data
+      periodMetrics?.forEach(metric => {
+        const existing = employeeProductivity.get(metric.user_id)
+        if (existing) {
+          existing.focusSeconds += metric.focus_time_seconds || 0
+        }
+      })
+    } else if (allPeriodScreenshots && allPeriodScreenshots.length > 0) {
+      // Estimate from screenshots if no sessions
+      const screenshotsByUser = allPeriodScreenshots.reduce((acc, screenshot) => {
+        acc[screenshot.user_id] = (acc[screenshot.user_id] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+
+      Object.entries(screenshotsByUser).forEach(([userId, count]) => {
+        const employee = allEmployees?.find(emp => emp.id === userId)
+        if (employee) {
+          const estimatedSeconds = count * 120 // 2 minutes per screenshot
+          employeeProductivity.set(userId, {
+            name: employee.name || employee.email,
+            email: employee.email,
+            totalSeconds: estimatedSeconds,
+            focusSeconds: Math.floor(estimatedSeconds * 0.85),
+            productivity: 0
+          })
+        }
+      })
+    }
 
     // Calculate productivity percentages and create top performers list
     const topPerformers = Array.from(employeeProductivity.entries())

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://qqnmilkgltcooqzytkxy.supabase.co https://*.supabase.co data:; img-src 'self' data: blob:">
+  <title>Work Invigilator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Auth Section -->
+    <div id="auth-section">
+      <div class="app-header">
+        <h1>Work Invigilator</h1>
+      </div>
+
+      <!-- Login Form -->
+      <div id="auth-forms">
+        <form id="login-form" class="auth-form">
+          <h2>Employee Login</h2>
+          <p>Use the credentials provided by your administrator to start tracking your work session.</p>
+          <div class="form-group">
+            <label for="login-email">Email</label>
+            <input type="email" id="login-email" required placeholder="Enter your work email">
+          </div>
+          <div class="form-group">
+            <label for="login-password">Password</label>
+            <input type="password" id="login-password" required placeholder="Enter your password">
+          </div>
+          <button type="submit" class="btn btn-primary">Login to Start Session</button>
+          <div id="auth-message" class="auth-message"></div>
+          <p style="text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 12px; margin-top: 20px;">
+            Don't have credentials? Contact your administrator for access.
+          </p>
+        </form>
+      </div>
+
+      <!-- User Info (shown when authenticated) -->
+      <div id="user-info" class="hidden">
+        <div class="user-card">
+          <div class="user-avatar">👤</div>
+          <div class="user-details">
+            <div id="user-email" class="user-email"></div>
+            <div id="user-role" class="user-role"></div>
+          </div>
+        </div>
+        <button id="logout-btn" class="btn btn-secondary">Logout</button>
+      </div>
+    </div>
+
+    <!-- Main Interface (shown when authenticated) -->
+    <div id="main-interface" class="hidden">
+      <!-- Main Toggle Button -->
+      <button id="main-toggle-btn" class="toggle-btn toggle-off">
+        <div class="toggle-icon" id="toggle-icon">🔴</div>
+        <div class="toggle-content">
+          <div class="toggle-status" id="toggle-status">Work Invigilator OFF</div>
+          <div class="toggle-subtitle" id="toggle-subtitle">Click to start session</div>
+        </div>
+      </button>
+
+      <!-- Monitoring Status -->
+      <div id="monitoring-status" class="monitoring-panel hidden">
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">⏱️ Session Time</span>
+            <span id="session-timer" class="status-value">00:00:00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Break Control -->
+      <div class="break-panel">
+        <button id="break-toggle-btn" class="break-toggle-btn break-off">
+          <span id="break-icon">☕</span>
+          <span id="break-text">Take Break</span>
+        </button>
+      </div>
+
+      <!-- Permission Status -->
+      <div id="permission-status" class="permission-card hidden">
+        <div class="permission-icon">🎤</div>
+        <div id="permission-text" class="permission-text">Checking microphone...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load app script -->
+  <script src="renderer.js"></script>
+</body>
+</html>
+

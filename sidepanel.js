@@ -15,6 +15,7 @@ class AudioRecorder {
     this.userRole = null;
     this.isMonitoring = false;
     this.sessionStartTime = null;
+    this.currentSessionId = null; // Track active recording session for punch in/out
     this.sessionTimerInterval = null;
     this.isOnBreak = false;
     this.breakStartTime = null;
@@ -110,20 +111,48 @@ class AudioRecorder {
 
   // Recording control methods
   async startMonitoring() {
-    console.log('🎯 Starting monitoring session...');
+    const logPrefix = `[${new Date().toISOString()}] [startMonitoring]`;
+    console.log(`${logPrefix} 🎯 Starting monitoring session (PUNCH IN)...`);
 
     if (this.isMonitoring) {
-      console.warn('⚠️ Already monitoring');
+      console.warn(`${logPrefix} ⚠️ Already monitoring`);
       return;
     }
 
     try {
+      // Set session start time FIRST
+      this.sessionStartTime = new Date();
+
+      // Create punch-in record in recording_sessions
+      console.log(`${logPrefix} 📝 Creating punch-in session record...`);
+      const { data: sessionData, error: sessionError } = await this.supabase
+        .from('recording_sessions')
+        .insert([{
+          user_id: this.currentUser.id,
+          organization_id: this.organizationId,
+          session_start_time: this.sessionStartTime.toISOString(),
+          session_end_time: null, // NULL = currently punched in
+          total_duration_seconds: 0,
+          total_chunks: 0,
+          total_chunk_duration_seconds: 0,
+          chunk_files: []
+        }])
+        .select()
+        .single();
+
+      if (sessionError) {
+        console.error(`${logPrefix} ❌ Failed to create session record:`, sessionError);
+        throw new Error('Failed to punch in: ' + sessionError.message);
+      }
+
+      this.currentSessionId = sessionData.id;
+      console.log(`${logPrefix} ✅ Punched in - Session ID: ${this.currentSessionId}`);
+
       // Start recording
       await this.recording.startRecording();
 
       // Update state
       this.isMonitoring = true;
-      this.sessionStartTime = new Date();
 
       // Start session timer
       this.startSessionTimer();
@@ -138,23 +167,30 @@ class AudioRecorder {
       // Save state
       this.storage.saveMonitoringState();
 
-      console.log('✅ Monitoring session started successfully');
+      console.log(`${logPrefix} ✅ Monitoring session started successfully`);
     } catch (error) {
-      console.error('❌ Failed to start monitoring:', error);
+      console.error(`${logPrefix} ❌ Failed to start monitoring:`, error);
       this.ui.showMessage('Failed to start monitoring: ' + error.message, 'error');
     }
   }
 
   async stopMonitoring() {
-    console.log('🛑 Stopping monitoring session...');
+    const logPrefix = `[${new Date().toISOString()}] [stopMonitoring]`;
+    console.log(`${logPrefix} 🛑 Stopping monitoring session (PUNCH OUT)...`);
 
     if (!this.isMonitoring) {
-      console.warn('⚠️ Not currently monitoring');
+      console.warn(`${logPrefix} ⚠️ Not currently monitoring`);
       return;
     }
 
     try {
-      // Stop timers and intervals first
+      // Calculate session duration
+      const sessionEndTime = new Date();
+      const sessionDuration = this.sessionStartTime
+        ? Math.floor((sessionEndTime.getTime() - this.sessionStartTime.getTime()) / 1000)
+        : 0;
+
+      // Stop timers first
       this.stopSessionTimer();
       this.stopScreenshotCapture();
 
@@ -163,13 +199,36 @@ class AudioRecorder {
         this.endBreak();
       }
 
-      // Stop recording - this will trigger saveCurrentChunk and saveSessionSummary
-      // IMPORTANT: Don't clear sessionStartTime until after recording stops
+      // Stop recording (this will save final chunk)
       await this.recording.stopRecording();
 
-      // Now clear the session state
+      // Update punch-out record in recording_sessions
+      if (this.currentSessionId) {
+        console.log(`${logPrefix} 📝 Updating punch-out session record...`);
+        const { error: updateError } = await this.supabase
+          .from('recording_sessions')
+          .update({
+            session_end_time: sessionEndTime.toISOString(),
+            total_duration_seconds: sessionDuration,
+            total_chunks: this.recording.sessionChunks.length,
+            total_chunk_duration_seconds: this.recording.sessionChunks.reduce((sum, chunk) => sum + chunk.duration, 0),
+            chunk_files: this.recording.sessionChunks
+          })
+          .eq('id', this.currentSessionId);
+
+        if (updateError) {
+          console.error(`${logPrefix} ❌ Failed to update session record:`, updateError);
+        } else {
+          console.log(`${logPrefix} ✅ Punched out - Duration: ${sessionDuration}s (${Math.floor(sessionDuration/60)} min)`);
+        }
+      } else {
+        console.warn(`${logPrefix} ⚠️ No session ID found for punch out`);
+      }
+
+      // Clear state
       this.isMonitoring = false;
       this.sessionStartTime = null;
+      this.currentSessionId = null;
 
       // Update UI
       this.ui.updateMonitoringState(false);
@@ -178,9 +237,9 @@ class AudioRecorder {
       // Save state
       this.storage.saveMonitoringState();
 
-      console.log('✅ Monitoring session stopped successfully');
+      console.log(`${logPrefix} ✅ Monitoring session stopped successfully`);
     } catch (error) {
-      console.error('❌ Failed to stop monitoring:', error);
+      console.error(`${logPrefix} ❌ Failed to stop monitoring:`, error);
       this.ui.showMessage('Failed to stop monitoring: ' + error.message, 'error');
     }
   }

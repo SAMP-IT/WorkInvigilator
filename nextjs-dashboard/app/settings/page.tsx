@@ -34,7 +34,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'account' | 'organization' | 'preferences' | 'security'>('account');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -42,13 +42,6 @@ export default function SettingsPage() {
     email: '',
     department: ''
   });
-
-  const tabs = [
-    { id: 'account' as const, label: 'Account Details', icon: '👤' },
-    { id: 'organization' as const, label: 'Organization', icon: '🏢' },
-    { id: 'preferences' as const, label: 'Preferences', icon: '⚙️' },
-    { id: 'security' as const, label: 'Security', icon: '🔒' }
-  ];
 
   useEffect(() => {
     if (profile?.organization_id && user?.id) {
@@ -90,13 +83,23 @@ export default function SettingsPage() {
     try {
       setSaving(true);
       setError(null);
+      setSuccessMessage(null);
+
+      if (!user?.id) {
+        setError('User not authenticated');
+        setSaving(false);
+        return;
+      }
 
       const response = await fetch('/api/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          userId: user.id,
+          ...formData
+        }),
       });
 
       if (!response.ok) {
@@ -104,8 +107,13 @@ export default function SettingsPage() {
       }
 
       const data = await response.json();
-      setSettings(data.settings);
+      // Reload settings to get updated data
+      await loadSettings();
+      setSuccessMessage('Settings updated successfully!');
       setIsEditing(false);
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       setError('Failed to save settings. Please try again.');
     } finally {
@@ -121,6 +129,8 @@ export default function SettingsPage() {
         department: settings.department
       });
     }
+    setError(null);
+    setSuccessMessage(null);
     setIsEditing(false);
   };
 
@@ -138,31 +148,16 @@ export default function SettingsPage() {
               {loading ? '...' : settings?.role || 'USER'}
             </Badge>
             <Button variant="outline">
-              🚪 Switch Account
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              Switch Account
             </Button>
           </div>
         </div>
 
-        {/* Settings Tabs */}
+        {/* Account Settings */}
         <Card>
-          <CardHeader className="border-b border-line">
-            <div className="flex space-x-4">
-              {tabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === tab.id
-                      ? 'bg-primary/10 text-primary border border-primary/20'
-                      : 'text-ink-mid hover:text-ink-hi hover:bg-raised'
-                  }`}
-                >
-                  <span>{tab.icon}</span>
-                  <span>{tab.label}</span>
-                </button>
-              ))}
-            </div>
-          </CardHeader>
           <CardContent>
             {loading ? (
               <div className="space-y-6">
@@ -193,9 +188,8 @@ export default function SettingsPage() {
               </div>
             ) : (
               <>
-                {/* Account Details Tab */}
-                {activeTab === 'account' && (
-                  <div className="space-y-6">
+                {/* Account Details */}
+                <div className="space-y-6">
                     {/* Profile Section */}
                     <div className="flex items-start space-x-6">
                       <div className="flex flex-col items-center space-y-3">
@@ -258,21 +252,33 @@ export default function SettingsPage() {
                           </div>
                         </div>
 
-                        <div className="flex space-x-3">
-                          {isEditing ? (
-                            <>
-                              <Button onClick={handleSave} disabled={saving}>
-                                {saving ? 'Saving...' : 'Save Changes'}
-                              </Button>
-                              <Button variant="outline" onClick={handleCancel}>
-                                Cancel
-                              </Button>
-                            </>
-                          ) : (
-                            <Button onClick={() => setIsEditing(true)}>
-                              Edit Profile
-                            </Button>
+                        <div className="space-y-3">
+                          {successMessage && (
+                            <div className="px-4 py-2 bg-success/10 border border-success/20 rounded-lg text-success text-sm">
+                              {successMessage}
+                            </div>
                           )}
+                          {error && !loading && (
+                            <div className="px-4 py-2 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm">
+                              {error}
+                            </div>
+                          )}
+                          <div className="flex space-x-3">
+                            {isEditing ? (
+                              <>
+                                <Button onClick={handleSave} disabled={saving}>
+                                  {saving ? 'Saving...' : 'Save Changes'}
+                                </Button>
+                                <Button variant="outline" onClick={handleCancel}>
+                                  Cancel
+                                </Button>
+                              </>
+                            ) : (
+                              <Button onClick={() => setIsEditing(true)}>
+                                Edit Profile
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -304,254 +310,7 @@ export default function SettingsPage() {
                         </CardContent>
                       </Card>
                     </div>
-
-                    {/* Account Info */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Account Information</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-sm font-medium text-ink-muted">Member Since</label>
-                            <p className="text-ink-hi font-mono">{settings.joinDate}</p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-ink-muted">Last Login</label>
-                            <p className="text-ink-hi font-mono">{settings.lastLogin}</p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-ink-muted">User ID</label>
-                            <p className="text-ink-hi font-mono">{settings.id}</p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-ink-muted">Organization</label>
-                            <p className="text-ink-hi">{settings.organization}</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
                   </div>
-                )}
-
-                {/* Organization Tab */}
-                {activeTab === 'organization' && (
-                  <div className="space-y-6">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Organization Details</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <label className="block text-sm font-medium text-ink-hi mb-2">
-                              Organization Name
-                            </label>
-                            <p className="text-ink-mid">{settings.organization}</p>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-ink-hi mb-2">
-                              Industry
-                            </label>
-                            <p className="text-ink-mid">Software Development</p>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-ink-hi mb-2">
-                              Timezone
-                            </label>
-                            <p className="text-ink-mid">UTC+00:00 (GMT)</p>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-ink-hi mb-2">
-                              Working Hours
-                            </label>
-                            <p className="text-ink-mid">09:00 - 17:00</p>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-ink-hi mb-2">
-                              Working Days
-                            </label>
-                            <p className="text-ink-mid">Monday - Friday</p>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-ink-hi mb-2">
-                              Total Employees
-                            </label>
-                            <p className="text-ink-mid">{settings.totalEmployees} members</p>
-                          </div>
-                        </div>
-                        <div className="mt-6">
-                          <Button>
-                            Edit Organization Settings
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                )}
-
-                {/* Preferences Tab */}
-                {activeTab === 'preferences' && (
-                  <div className="space-y-6">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Monitoring Preferences</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <label className="text-sm font-medium text-ink-hi">Screenshot Interval</label>
-                              <p className="text-xs text-ink-muted">How often to capture screenshots</p>
-                            </div>
-                            <select className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi">
-                              <option>Every 5 minutes</option>
-                              <option>Every 10 minutes</option>
-                              <option>Every 15 minutes</option>
-                              <option>Every 30 minutes</option>
-                            </select>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <label className="text-sm font-medium text-ink-hi">Data Retention</label>
-                              <p className="text-xs text-ink-muted">How long to keep monitoring data</p>
-                            </div>
-                            <select className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi">
-                              <option>30 days</option>
-                              <option>60 days</option>
-                              <option>90 days</option>
-                              <option>1 year</option>
-                            </select>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <label className="text-sm font-medium text-ink-hi">Auto-delete Old Data</label>
-                              <p className="text-xs text-ink-muted">Automatically remove data after retention period</p>
-                            </div>
-                            <input type="checkbox" defaultChecked className="rounded" />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Notification Preferences</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <label className="text-sm font-medium text-ink-hi">Email Notifications</label>
-                              <p className="text-xs text-ink-muted">Receive email alerts and reports</p>
-                            </div>
-                            <input type="checkbox" defaultChecked className="rounded" />
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <label className="text-sm font-medium text-ink-hi">Low Productivity Alerts</label>
-                              <p className="text-xs text-ink-muted">Alert when employee productivity drops</p>
-                            </div>
-                            <input type="checkbox" defaultChecked className="rounded" />
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <label className="text-sm font-medium text-ink-hi">Daily Reports</label>
-                              <p className="text-xs text-ink-muted">Receive daily summary reports</p>
-                            </div>
-                            <input type="checkbox" defaultChecked className="rounded" />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                )}
-
-                {/* Security Tab */}
-                {activeTab === 'security' && (
-                  <div className="space-y-6">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Password & Authentication</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          <Button>
-                            Change Password
-                          </Button>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <label className="text-sm font-medium text-ink-hi">Two-Factor Authentication</label>
-                              <p className="text-xs text-ink-muted">Add extra security to your account</p>
-                            </div>
-                            <Button variant="outline" size="sm">
-                              Enable 2FA
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Session Management</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between p-3 bg-raised rounded-lg">
-                            <div>
-                              <div className="text-sm font-medium text-ink-hi">Current Session</div>
-                              <div className="text-xs text-ink-muted">Chrome on Windows • Active now</div>
-                            </div>
-                            <Badge variant="success">Active</Badge>
-                          </div>
-                          <div className="flex items-center justify-between p-3 bg-raised rounded-lg">
-                            <div>
-                              <div className="text-sm font-medium text-ink-hi">Previous Session</div>
-                              <div className="text-xs text-ink-muted">Chrome on Windows • 2 hours ago</div>
-                            </div>
-                            <Button variant="ghost" size="sm">
-                              Revoke
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="mt-4">
-                          <Button variant="outline">
-                            Revoke All Sessions
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Account Actions</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <label className="text-sm font-medium text-ink-hi">Export Account Data</label>
-                              <p className="text-xs text-ink-muted">Download all your account information</p>
-                            </div>
-                            <Button variant="outline">
-                              Export Data
-                            </Button>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <label className="text-sm font-medium text-ink-hi">Delete Account</label>
-                              <p className="text-xs text-ink-muted">Permanently delete your account and data</p>
-                            </div>
-                            <Button variant="danger">
-                              Delete Account
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                )}
               </>
             )}
           </CardContent>

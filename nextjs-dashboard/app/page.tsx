@@ -200,14 +200,12 @@ function HomePageContent() {
             icon={<KpiIcon src="/sessions.png" alt="Active Sessions" />}
             label="Active Sessions"
             value={employees.filter(emp => emp.status === 'online').length}
-            delta={{ value: 8.2, direction: "up" }}
             onClick={() => router.push("/sessions")}
           />
           <KpiTile
             icon={<KpiIcon src="/employees.png" alt="Active Employees" />}
             label="Active Employees"
             value={employees.length}
-            delta={{ value: 2.1, direction: "up" }}
             onClick={() => router.push("/employees")}
           />
           <KpiTile
@@ -216,7 +214,6 @@ function HomePageContent() {
             value={employees.length > 0 ?
               `${(employees.reduce((sum, emp) => sum + emp.productivity7d, 0) / employees.length).toFixed(1)}%` :
               "0%"}
-            delta={{ value: 3.2, direction: "up" }}
             onClick={() => router.push("/reports")}
           />
           <KpiTile
@@ -225,7 +222,6 @@ function HomePageContent() {
             value={employees.length > 0 ?
               `${(employees.reduce((sum, emp) => sum + emp.avgBreakHDay, 0) / employees.length).toFixed(1)}h` :
               "0h"}
-            delta={{ value: 1.5, direction: "up" }}
             onClick={() => router.push("/reports")}
           />
           <KpiTile
@@ -234,14 +230,12 @@ function HomePageContent() {
             value={employees.length > 0 ?
               `${Math.round(employees.reduce((sum, emp) => sum + emp.avgSessionMin, 0) / employees.length)}min` :
               "0min"}
-            delta={{ value: 0, direction: "flat" }}
             onClick={() => router.push("/reports")}
           />
           <KpiTile
             icon={<KpiIcon src="/screenshots.png" alt="Screenshots" />}
             label="Screenshots Today"
             value={screenshots.length}
-            delta={{ value: 12.3, direction: "up" }}
             onClick={() => router.push("/screenshots")}
           />
         </div>

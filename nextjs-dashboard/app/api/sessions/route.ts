@@ -49,8 +49,71 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organizationId)
       .order('session_start_time', { ascending: false })
 
+    // If no sessions exist, create sessions from screenshots
+    if (!sessions || sessions.length === 0) {
+      // Get all screenshots grouped by user and date
+      const { data: screenshots } = await supabaseAdmin
+        .from('screenshots')
+        .select('user_id, created_at')
+        .eq('organization_id', organizationId)
+        .order('created_at', { ascending: false })
+
+      if (!screenshots || screenshots.length === 0) {
+        return NextResponse.json({
+          sessions: [],
+          totalCount: 0,
+          activeCount: 0
+        })
+      }
+
+      // Group screenshots by user and session (gap > 30 minutes = new session)
+      const sessionGroups = new Map<string, any[]>()
+
+      screenshots.forEach(screenshot => {
+        const date = new Date(screenshot.created_at).toISOString().split('T')[0]
+        const key = `${screenshot.user_id}_${date}`
+
+        if (!sessionGroups.has(key)) {
+          sessionGroups.set(key, [])
+        }
+        sessionGroups.get(key)!.push(screenshot)
+      })
+
+      // Create synthetic sessions from screenshot groups
+      const syntheticSessions: any[] = []
+      sessionGroups.forEach((screenshots, key) => {
+        const userId = key.split('_')[0]
+        const sortedScreenshots = screenshots.sort((a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        )
+
+        const startTime = sortedScreenshots[0].created_at
+        const endTime = sortedScreenshots[sortedScreenshots.length - 1].created_at
+
+        const durationSeconds = Math.floor(
+          (new Date(endTime).getTime() - new Date(startTime).getTime()) / 1000
+        )
+
+        syntheticSessions.push({
+          id: `synthetic_${key}`,
+          user_id: userId,
+          session_start_time: startTime,
+          session_end_time: endTime,
+          total_duration_seconds: durationSeconds,
+          organization_id: organizationId,
+          screenshots_count: screenshots.length,
+          is_synthetic: true
+        })
+      })
+
+      // Use synthetic sessions instead of database sessions
+      const formattedSessions = syntheticSessions
+    } else {
+      var formattedSessions = sessions
+    }
+
     // Get unique user IDs to fetch profiles
-    const userIds = [...new Set((sessions || []).map(s => s.user_id))]
+    const userIds = [...new Set(formattedSessions.map(s => s.user_id))]
 
     // Fetch profiles for all users
     const { data: profiles } = await supabaseAdmin
@@ -66,19 +129,32 @@ export async function GET(request: NextRequest) {
 
     // Get productivity metrics and screenshots for each session
     const sessionsWithMetrics = await Promise.all(
-      (sessions || []).map(async (session) => {
-        // Get productivity metrics for this session
-        const { data: metrics } = await supabaseAdmin
-          .from('productivity_metrics')
-          .select('focus_time_seconds, productivity_percentage, screenshots_count')
-          .eq('session_id', session.id)
-          .single()
+      formattedSessions.map(async (session) => {
+        // Get productivity metrics for this session (skip for synthetic sessions)
+        let metrics = null
+        let screenshotsCount = 0
 
-        // Get screenshots count for this session
-        const { count: screenshotsCount } = await supabaseAdmin
-          .from('screenshots')
-          .select('*', { count: 'exact', head: true })
-          .eq('session_id', session.id)
+        if (session.is_synthetic) {
+          // For synthetic sessions, use the pre-calculated screenshot count
+          screenshotsCount = session.screenshots_count || 0
+        } else {
+          // For real sessions, query metrics and screenshots
+          const { data: metricsData } = await supabaseAdmin
+            .from('productivity_metrics')
+            .select('focus_time_seconds, productivity_percentage, screenshots_count')
+            .eq('session_id', session.id)
+            .single()
+
+          metrics = metricsData
+
+          // Get screenshots count for this session
+          const { count } = await supabaseAdmin
+            .from('screenshots')
+            .select('*', { count: 'exact', head: true })
+            .eq('session_id', session.id)
+
+          screenshotsCount = count || 0
+        }
 
         // Calculate duration in hours and minutes
         const totalSeconds = session.total_duration_seconds || 0
