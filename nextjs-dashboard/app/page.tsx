@@ -48,7 +48,8 @@ function HomePageContent() {
     null
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [kpis, setKpis] = useState({ activeSessions: 0, totalEmployees: 0, avgProductivity: 0, totalScreenshots: 0 });
+  const [kpis, setKpis] = useState({ activeSessions: 0, totalEmployees: 0, avgProductivity: 0, totalScreenshots: 0, avgSessionDuration: 0, avgFocusHours: 0 });
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
 
   useEffect(() => {
     if (profile?.organization_id) {
@@ -89,6 +90,11 @@ function HomePageContent() {
         // Set KPIs from dashboard data
         if (dashboardData.kpis) {
           setKpis(dashboardData.kpis);
+        }
+
+        // Set active sessions from dashboard data
+        if (dashboardData.recentActiveSessions) {
+          setActiveSessions(dashboardData.recentActiveSessions);
         }
 
         // Set screenshots from dashboard data
@@ -214,19 +220,15 @@ function HomePageContent() {
             onClick={() => router.push("/reports")}
           />
           <KpiTile
-            icon={<KpiIcon src="/focus.png" alt="Break Time" />}
-            label="Avg Break Time"
-            value={employees.length > 0 ?
-              `${(employees.reduce((sum, emp) => sum + emp.avgBreakHDay, 0) / employees.length).toFixed(1)}h` :
-              "0h"}
+            icon={<KpiIcon src="/focus.png" alt="Focus Time" />}
+            label="Avg Focus Time"
+            value={`${kpis.avgFocusHours}h`}
             onClick={() => router.push("/reports")}
           />
           <KpiTile
             icon={<KpiIcon src="/sessions.png" alt="Average Session" />}
             label="Avg Session"
-            value={employees.length > 0 ?
-              `${Math.round(employees.reduce((sum, emp) => sum + emp.avgSessionMin, 0) / employees.length)}min` :
-              "0min"}
+            value={`${kpis.avgSessionDuration}min`}
             onClick={() => router.push("/reports")}
           />
           <KpiTile
@@ -262,23 +264,20 @@ function HomePageContent() {
                       <div className="h-6 bg-gray-300 rounded w-12"></div>
                     </div>
                   ))
-                ) : employees.length > 0 ? (
-                  employees.slice(0, 4).map((employee, i) => (
+                ) : activeSessions.length > 0 ? (
+                  activeSessions.slice(0, 4).map((session) => (
                     <div
-                      key={employee.id}
+                      key={session.id}
                       className="flex items-center justify-between p-3 bg-raised rounded-lg"
                     >
-                      <div
-                        className="flex items-center space-x-3 cursor-pointer flex-1"
-                        onClick={() => openEmployeeModal(employee)}
-                      >
-                        <div className={`w-2 h-2 rounded-full ${employee.status === 'online' ? 'bg-success animate-pulse' : 'bg-gray-400'}`}></div>
+                      <div className="flex items-center space-x-3 flex-1">
+                        <div className="w-2 h-2 rounded-full bg-success animate-pulse"></div>
                         <div>
-                          <p className="text-sm font-medium text-ink-hi hover:text-primary transition-colors">
-                            {employee.name || employee.email.split("@")[0]}
+                          <p className="text-sm font-medium text-ink-hi">
+                            {session.employeeName}
                           </p>
                           <p className="text-xs text-ink-muted">
-                            Session: {employee.avgSessionMin}min
+                            Session: {session.duration}
                           </p>
                         </div>
                       </div>
@@ -286,7 +285,7 @@ function HomePageContent() {
                         size="sm"
                         variant="primary"
                         className="cursor-pointer"
-                        onClick={() => openEmployeeModal(employee)}
+                        onClick={() => router.push(`/sessions?employee=${session.employeeId}`)}
                       >
                         View
                       </Badge>

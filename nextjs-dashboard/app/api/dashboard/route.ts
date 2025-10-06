@@ -180,14 +180,26 @@ export async function GET(request: NextRequest) {
       const durationMs = now.getTime() - startTime.getTime()
       const durationHours = Math.floor(durationMs / (1000 * 60 * 60))
       const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60))
+      const durationSeconds = Math.floor((durationMs % (1000 * 60)) / 1000)
 
       const profile = activeProfileMap[session.user_id]
+      
+      // Format duration based on how long the session has been running
+      let durationFormatted = ''
+      if (durationHours > 0) {
+        durationFormatted = `${durationHours}h ${durationMinutes}m`
+      } else if (durationMinutes > 0) {
+        durationFormatted = `${durationMinutes}m`
+      } else {
+        durationFormatted = `${durationSeconds}s`
+      }
+      
       return {
         id: session.id,
         employeeId: session.user_id,
         employeeName: profile?.name || profile?.email || 'Unknown',
         startTime: startTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-        duration: durationHours > 0 ? `${durationHours}h ${durationMinutes}m` : `${durationMinutes}m`,
+        duration: durationFormatted,
         status: 'active' as const
       }
     }) || []
@@ -287,7 +299,7 @@ export async function GET(request: NextRequest) {
     // Calculate period-specific insights
     const insights = {
       totalSessions: periodSessions?.length || 0,
-      totalScreenshots: periodScreenshots?.length || 0,
+      totalScreenshots: allPeriodScreenshots?.length || 0,
       avgSessionsPerEmployee: totalEmployees > 0 ?
         Number(((periodSessions?.length || 0) / totalEmployees).toFixed(1)) : 0,
       mostActiveDay: 'Monday', // TODO: Calculate from actual data
@@ -306,7 +318,7 @@ export async function GET(request: NextRequest) {
         avgProductivity,
         avgFocusHours,
         avgSessionDuration,
-        totalScreenshots: periodScreenshots?.length || 0
+        totalScreenshots: allPeriodScreenshots?.length || 0
       },
 
       // Recent Activity
