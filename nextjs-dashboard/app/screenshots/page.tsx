@@ -16,6 +16,7 @@ interface Screenshot {
   size: string;
   application: string;
   filename?: string;
+  backupUrl?: string;
 }
 
 interface Employee {
@@ -297,7 +298,6 @@ export default function ScreenshotsPage() {
                         alt={`Screenshot by ${screenshot.employeeName}`}
                         className="w-full h-full object-cover"
                         onError={(e) => {
-                          // Fallback to placeholder if image fails to load
                           const target = e.target as HTMLImageElement;
                           target.style.display = 'none';
                           target.parentElement!.innerHTML = `

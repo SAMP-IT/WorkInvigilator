@@ -6,12 +6,29 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period') || 'today' // today, week, month
     const organizationId = searchParams.get('organizationId')
+    const userId = searchParams.get('userId')
 
     if (!organizationId) {
       return NextResponse.json(
         { error: 'Organization ID is required' },
         { status: 400 }
       )
+    }
+
+    // Check if user is admin
+    if (userId) {
+      const { data: userProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single()
+
+      if (userProfile?.role !== 'admin') {
+        return NextResponse.json(
+          { error: 'Unauthorized: Admin access required' },
+          { status: 403 }
+        )
+      }
     }
 
     // Get date range based on period
@@ -56,6 +73,7 @@ export async function GET(request: NextRequest) {
         .select('user_id, created_at')
         .eq('organization_id', organizationId)
         .gte('created_at', twoMinutesAgo.toISOString())
+        .range(0, 999999) // Bypass default limit
 
       activeUserIds = [...new Set((recentScreenshots || []).map(s => s.user_id))]
       
@@ -119,6 +137,7 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organizationId)
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString())
+      .range(0, 9999999) // Fetch all screenshots without limit
 
     // Get screenshots for the period filtered by organization
     const { data: periodScreenshots } = await supabaseAdmin

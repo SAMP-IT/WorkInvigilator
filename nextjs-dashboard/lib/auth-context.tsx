@@ -191,12 +191,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut() {
-    setLoading(true)
-    await supabase.auth.signOut()
-    setUser(null)
-    setProfile(null)
-    setSession(null)
-    setLoading(false)
+    try {
+      setLoading(true)
+      // Use scope: 'local' to only clear local session without API call
+      await supabase.auth.signOut({ scope: 'local' })
+    } catch (error) {
+      // Ignore errors during signout - we still want to clear local state
+      console.error('Signout error (ignored):', error)
+    } finally {
+      // Always clear local state regardless of API success
+      setUser(null)
+      setProfile(null)
+      setSession(null)
+      setLoading(false)
+    }
   }
 
   const value = {

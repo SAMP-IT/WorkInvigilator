@@ -24,7 +24,7 @@ export function TopBar() {
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
-  const { profile } = useAuth();
+  const { profile, signOut } = useAuth();
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -111,8 +111,14 @@ export function TopBar() {
   }, [router]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setShowUserMenu(false);
+    try {
+      setShowUserMenu(false);
+      await signOut(); // Use auth context signOut which handles cleanup
+      // Redirect to login page
+      router.push('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
   const getUserInitials = (name: string) => {

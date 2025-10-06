@@ -3,21 +3,37 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
+import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { signIn, user, loading: authLoading } = useAuth()
+  const { signIn, signOut, user, loading: authLoading } = useAuth()
   const router = useRouter()
 
-  // Redirect if already logged in
+  // Redirect if already logged in (admins only)
   useEffect(() => {
     if (!authLoading && user) {
-      router.replace('/')
+      // Check if user is admin
+      supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+        .then(({ data: profileData }) => {
+          if (profileData?.role === 'admin') {
+            // Admin user - redirect to dashboard
+            router.replace('/')
+          } else {
+            // Employee - sign them out
+            signOut()
+            setError('❌ Access Denied: This dashboard is for administrators only. Please use the Work Invigilator Desktop application.')
+          }
+        })
     }
-  }, [user, authLoading, router])
+  }, [user, authLoading, router, signOut])
 
   // Show loading while checking auth
   if (authLoading) {
@@ -54,8 +70,34 @@ export default function LoginPage() {
         }
         setLoading(false)
       } else {
-        // Redirect immediately after successful login
-        router.push('/')
+        // Check user role before allowing access
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single()
+
+          if (profileError) {
+            console.error('Error fetching profile:', profileError)
+            setError('Failed to verify user permissions')
+            await signOut()
+            setLoading(false)
+            return
+          }
+
+          if (profileData?.role !== 'admin') {
+            // Employee trying to access admin dashboard - block them
+            await signOut()
+            setError('❌ Access Denied: This dashboard is for administrators only. Please use the Work Invigilator Desktop application.')
+            setLoading(false)
+            return
+          }
+
+          // Admin user - allow access
+          router.push('/')
+        }
       }
     } catch (err) {
       console.error('[Login] Unexpected error:', err)

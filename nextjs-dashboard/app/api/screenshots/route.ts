@@ -38,11 +38,10 @@ export async function GET(request: NextRequest) {
       query = query.lt('created_at', endDateTime.toISOString())
     }
 
-    // Apply ordering
-    query = query
-      .order('created_at', { ascending: false })
+    // Apply ordering - use range to bypass 1000 row limit
+    query = query.order('created_at', { ascending: false })
 
-    const { data: screenshots } = await query
+    const { data: screenshots } = await query.range(0, 999999) // Fetch up to 1 million rows
 
     // Get unique user IDs to fetch profiles
     const userIds = [...new Set((screenshots || []).map(s => s.user_id))]
@@ -75,7 +74,7 @@ export async function GET(request: NextRequest) {
 
       const profile = profileMap[screenshot.user_id]
 
-      // Get valid URL, regenerating if expired
+      // Get valid Backblaze URL, regenerating if expired (primary storage only)
       let validUrl = screenshot.file_url
       if (screenshot.storage_provider === 'backblaze' && screenshot.file_url) {
         const filePath = extractFilePathFromUrl(screenshot.file_url)
@@ -89,9 +88,9 @@ export async function GET(request: NextRequest) {
               screenshot.storage_provider
             )
           } catch (error) {
-            console.error('Failed to get valid URL for screenshot:', screenshot.id, error)
-            // Fallback to backup or original URL
-            validUrl = screenshot.backup_file_url || screenshot.file_url
+            console.error('Failed to regenerate Backblaze signed URL for screenshot:', screenshot.id, error)
+            // Keep original Backblaze URL even if regeneration fails
+            validUrl = screenshot.file_url
           }
         }
       }
@@ -102,6 +101,7 @@ export async function GET(request: NextRequest) {
         employeeName: profile?.name || profile?.email || 'Unknown Employee',
         timestamp,
         url: validUrl,
+        backupUrl: screenshot.backup_file_url,  // Include backup URL for fallback
         size: estimatedSize,
         application: 'Work Application', // Placeholder since we don't track specific apps yet
         filename: screenshot.filename

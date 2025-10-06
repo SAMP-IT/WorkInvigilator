@@ -40,7 +40,7 @@ interface Screenshot {
 function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { profile, loading: authLoading } = useAuth();
+  const { profile, user, loading: authLoading } = useAuth();
   const [employees, setEmployees] = useState<EmployeeWithMetrics[]>([]);
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +75,7 @@ function HomePageContent() {
 
       // Load dashboard metrics filtered by organization
       const dashboardResponse = await fetch(
-        `/api/dashboard?period=${period}&organizationId=${profile.organization_id}`,
+        `/api/dashboard?period=${period}&organizationId=${profile.organization_id}&userId=${user?.id}`,
         {
           signal: controller.signal,
           cache: 'no-store'

@@ -20,9 +20,13 @@ function getSupabaseAdminClient() {
       autoRefreshToken: false,
       persistSession: false
     },
+    db: {
+      schema: 'public'
+    },
     global: {
       headers: {
         'x-client-info': 'work-invigilator-admin',
+        'Prefer': 'return=representation'
       },
     },
   })
