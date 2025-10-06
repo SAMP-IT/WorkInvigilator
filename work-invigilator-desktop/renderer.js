@@ -35,8 +35,6 @@ class WorkInvigilatorApp {
   }
   
   async init() {
-    console.log('🚀 Initializing Work Invigilator Desktop...');
-    
     // Initialize UI
     this.initializeElements();
     this.bindEvents();
@@ -49,8 +47,6 @@ class WorkInvigilatorApp {
     
     // Check microphone permission
     this.checkMicrophonePermission();
-    
-    console.log('✅ Work Invigilator Desktop initialized');
   }
   
   initializeElements() {
@@ -217,8 +213,6 @@ class WorkInvigilatorApp {
         }
       };
 
-      console.log('✅ Supabase IPC wrapper initialized');
-      console.log(`ℹ️ Backblaze B2: ${this.backblazeEnabled ? 'Enabled' : 'Disabled'}`);
     } catch (error) {
       console.error('❌ Failed to initialize Supabase:', error);
       this.showMessage('Failed to initialize database connection', 'error');
@@ -241,7 +235,6 @@ class WorkInvigilatorApp {
           this.userRole = roleResult.value;
           this.organizationId = orgResult.value;
           
-          console.log('✅ Session restored:', this.currentUser.email);
           this.showAuthenticatedView();
           
           // Refresh token immediately to ensure it's valid
@@ -274,14 +267,10 @@ class WorkInvigilatorApp {
     this.tokenRefreshTimer = setInterval(async () => {
       await this.refreshAuthToken();
     }, 50 * 60 * 1000); // 50 minutes in milliseconds
-    
-    console.log('🔄 Token refresh timer started');
   }
   
   async refreshAuthToken() {
     try {
-      console.log('🔄 Refreshing auth token...');
-      
       // Get current session
       const { data, error } = await this.supabase.auth.getSession();
       
@@ -291,10 +280,7 @@ class WorkInvigilatorApp {
         // Store new access token
         await window.electronAPI.storeSet('accessToken', data.session.access_token);
         await window.electronAPI.storeSet('refreshToken', data.session.refresh_token);
-        
-        console.log('✅ Token refreshed successfully');
       } else {
-        console.warn('⚠️ No active session found');
         // Force logout if no session
         await this.logout();
       }
@@ -354,7 +340,6 @@ class WorkInvigilatorApp {
       await window.electronAPI.storeSet('accessToken', data.session.access_token);
       await window.electronAPI.storeSet('refreshToken', data.session.refresh_token);
       
-      console.log('✅ Login successful:', email);
       this.showAuthenticatedView();
       
       // Start token refresh timer
@@ -394,7 +379,6 @@ class WorkInvigilatorApp {
       this.userRole = null;
       this.organizationId = null;
       
-      console.log('✅ Logged out');
       this.showUnauthenticatedView();
       
     } catch (error) {
@@ -447,8 +431,6 @@ class WorkInvigilatorApp {
     if (this.isMonitoring) return;
     
     try {
-      console.log('🎯 Starting work session...');
-      
       this.sessionStartTime = new Date();
       
       // Create session record in database
@@ -472,8 +454,6 @@ class WorkInvigilatorApp {
       // Handle array response from Supabase
       const session = Array.isArray(sessionData) ? sessionData[0] : sessionData;
       this.currentSessionId = session?.id;
-      console.log('✅ Session created:', this.currentSessionId);
-      console.log('Session data:', session);
       
       // Start recording
       await this.startRecording();
@@ -489,8 +469,6 @@ class WorkInvigilatorApp {
       // Save state
       await this.saveMonitoringState();
       
-      console.log('✅ Work session started');
-      
     } catch (error) {
       console.error('❌ Failed to start monitoring:', error);
       this.showMessage('Failed to start session: ' + error.message, 'error');
@@ -501,8 +479,6 @@ class WorkInvigilatorApp {
     if (!this.isMonitoring) return;
     
     try {
-      console.log('🛑 Stopping work session...');
-      
       const sessionEndTime = new Date();
       const sessionDuration = Math.floor((sessionEndTime - this.sessionStartTime) / 1000);
       
@@ -537,8 +513,6 @@ class WorkInvigilatorApp {
       
       // Save state
       await this.saveMonitoringState();
-      
-      console.log('✅ Monitoring stopped');
       
     } catch (error) {
       console.error('❌ Failed to stop monitoring:', error);
@@ -608,8 +582,6 @@ class WorkInvigilatorApp {
         }
       }, this.CHUNK_DURATION);
       
-      console.log('✅ Recording started');
-      
     } catch (error) {
       console.error('❌ Failed to start recording:', error);
       throw error;
@@ -650,18 +622,18 @@ class WorkInvigilatorApp {
       const chunkBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
       const arrayBuffer = await chunkBlob.arrayBuffer();
       const chunkDuration = Math.floor((Date.now() - this.currentChunkStartTime) / 1000);
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const now = new Date();
+      const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      const time = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
       const chunkNumber = this.sessionChunks.length + 1;
-      const filename = `${this.currentUser.id}/chunk_${chunkNumber}_${timestamp}.webm`;
-
-      console.log('💾 Saving audio chunk:', chunkNumber, `(${(arrayBuffer.byteLength / 1024).toFixed(2)} KB)`);
+      const userEmail = this.currentUser.email || this.currentUser.id;
+      const filename = `${userEmail}/${date}/${time}_chunk_${chunkNumber}.webm`;
 
       let primaryUrl = null;
       let backupUrl = null;
 
       // Try Backblaze first (if enabled)
       if (this.backblazeEnabled) {
-        console.log('📤 Attempting Backblaze upload for audio chunk...');
         try {
           const { data: backblazeData, error: backblazeError } = await window.electronAPI.backblazeStorage('upload', {
             bucket: 'audio-recordings',
@@ -671,17 +643,12 @@ class WorkInvigilatorApp {
 
           if (!backblazeError && backblazeData) {
             primaryUrl = backblazeData.publicUrl;
-            console.log('✅ SUCCESS: Audio uploaded to Backblaze (primary)');
-            console.log('🔗 Backblaze URL:', primaryUrl);
           } else {
             console.error('❌ FAILED: Backblaze upload error:', backblazeError);
           }
         } catch (error) {
           console.error('❌ FAILED: Backblaze upload exception:', error.message);
-          console.warn('⚠️ Falling back to Supabase as primary...');
         }
-      } else {
-        console.log('ℹ️ Backblaze disabled, using Supabase only');
       }
 
       // Always upload to Supabase (as backup or primary)
@@ -699,7 +666,6 @@ class WorkInvigilatorApp {
 
       // If token expired, refresh and retry once
       if (uploadError && (uploadError.message?.includes('exp') || uploadError.message?.includes('token'))) {
-        console.log('🔄 Token expired, refreshing and retrying audio upload...');
         await this.refreshAuthToken();
         
         const retryResult = await this.supabase.storage
@@ -715,8 +681,6 @@ class WorkInvigilatorApp {
         if (!primaryUrl) {
           console.error('💥 CRITICAL: Both Backblaze and Supabase failed for audio chunk', chunkNumber);
           return;
-        } else {
-          console.warn('⚠️ Supabase backup failed, but Backblaze succeeded');
         }
       } else {
         const urlData = await this.supabase.storage
@@ -728,11 +692,6 @@ class WorkInvigilatorApp {
         if (!primaryUrl) {
           // If Backblaze failed/disabled, use Supabase as primary
           primaryUrl = backupUrl;
-          console.log('✅ SUCCESS: Audio uploaded to Supabase (primary)');
-          console.log('🔗 Supabase URL:', backupUrl);
-        } else {
-          console.log('✅ SUCCESS: Audio uploaded to Supabase (backup)');
-          console.log('🔗 Backup URL:', backupUrl);
         }
       }
 
@@ -742,7 +701,7 @@ class WorkInvigilatorApp {
         .insert([{
           user_id: this.currentUser.id,
           organization_id: this.organizationId,
-          session_start_time: this.sessionStartTime.toISOString(),
+          session_start_time: this.sessionStartTime ? this.sessionStartTime.toISOString() : new Date().toISOString(),
           chunk_number: chunkNumber,
           filename: filename,
           file_url: primaryUrl,
@@ -759,8 +718,6 @@ class WorkInvigilatorApp {
           file_url: primaryUrl,
           duration: chunkDuration
         });
-        console.log(`💾 Chunk ${chunkNumber} saved to database (primary: ${this.backblazeEnabled ? 'Backblaze' : 'Supabase'}, ${chunkDuration}s)`);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       } else {
         console.error('❌ FAILED: Database insert error for chunk', chunkNumber, dbError);
       }
@@ -773,7 +730,6 @@ class WorkInvigilatorApp {
   startBreak() {
     if (!this.isMonitoring || this.isOnBreak) return;
     
-    console.log('☕ Starting break...');
     this.isOnBreak = true;
     this.breakStartTime = new Date();
     
@@ -851,7 +807,6 @@ class WorkInvigilatorApp {
       
       if (result.success) {
         await this.saveScreenshot(result.dataUrl);
-        console.log('📸 Screenshot captured');
       }
     } catch (error) {
       console.error('❌ Screenshot capture failed:', error);
@@ -864,17 +819,17 @@ class WorkInvigilatorApp {
       const blob = await response.blob();
       const arrayBuffer = await blob.arrayBuffer();
 
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `${this.currentUser.id}/screenshot_${timestamp}.png`;
-
-      console.log('📸 Saving screenshot:', `(${(arrayBuffer.byteLength / 1024).toFixed(2)} KB)`);
+      const now = new Date();
+      const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      const time = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+      const userEmail = this.currentUser.email || this.currentUser.id;
+      const filename = `${userEmail}/${date}/${time}_screenshot.png`;
 
       let primaryUrl = null;
       let backupUrl = null;
 
       // Try Backblaze first (if enabled)
       if (this.backblazeEnabled) {
-        console.log('📤 Attempting Backblaze upload for screenshot...');
         try {
           const { data: backblazeData, error: backblazeError } = await window.electronAPI.backblazeStorage('upload', {
             bucket: 'screenshots',
@@ -884,17 +839,12 @@ class WorkInvigilatorApp {
 
           if (!backblazeError && backblazeData) {
             primaryUrl = backblazeData.publicUrl;
-            console.log('✅ SUCCESS: Screenshot uploaded to Backblaze (primary)');
-            console.log('🔗 Backblaze URL:', primaryUrl);
           } else {
             console.error('❌ FAILED: Backblaze screenshot upload error:', backblazeError);
           }
         } catch (error) {
           console.error('❌ FAILED: Backblaze screenshot upload exception:', error.message);
-          console.warn('⚠️ Falling back to Supabase as primary...');
         }
-      } else {
-        console.log('ℹ️ Backblaze disabled, using Supabase only');
       }
 
       // Always upload to Supabase (as backup or primary)
@@ -912,7 +862,6 @@ class WorkInvigilatorApp {
 
       // If token expired, refresh and retry once
       if (uploadError && (uploadError.message?.includes('exp') || uploadError.message?.includes('token'))) {
-        console.log('🔄 Token expired, refreshing and retrying screenshot upload...');
         await this.refreshAuthToken();
         
         const retryResult = await this.supabase.storage
@@ -928,8 +877,6 @@ class WorkInvigilatorApp {
         if (!primaryUrl) {
           console.error('💥 CRITICAL: Both Backblaze and Supabase failed for screenshot');
           return;
-        } else {
-          console.warn('⚠️ Supabase backup failed, but Backblaze succeeded');
         }
       } else {
         const urlData = await this.supabase.storage
@@ -941,11 +888,6 @@ class WorkInvigilatorApp {
         if (!primaryUrl) {
           // If Backblaze failed/disabled, use Supabase as primary
           primaryUrl = backupUrl;
-          console.log('✅ SUCCESS: Screenshot uploaded to Supabase (primary)');
-          console.log('🔗 Supabase URL:', backupUrl);
-        } else {
-          console.log('✅ SUCCESS: Screenshot uploaded to Supabase (backup)');
-          console.log('🔗 Backup URL:', backupUrl);
         }
       }
 
@@ -961,8 +903,6 @@ class WorkInvigilatorApp {
           backup_file_url: backupUrl,
           storage_provider: this.backblazeEnabled ? 'backblaze' : 'supabase'
         }]);
-
-      console.log(`💾 Screenshot saved to database (primary: ${this.backblazeEnabled ? 'Backblaze' : 'Supabase'})`);
 
     } catch (error) {
       console.error('💥 Save screenshot error:', error);
@@ -988,8 +928,6 @@ class WorkInvigilatorApp {
       this.startSessionTimer();
       this.startScreenshotCapture();
       this.updateMonitoringUI(true);
-      
-      console.log('🔄 Monitoring state restored');
     }
   }
   
