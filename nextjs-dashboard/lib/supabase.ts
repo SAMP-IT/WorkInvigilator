@@ -26,6 +26,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export interface Profile {
   id: string
   email: string
+  name?: string
+  department?: string
   role: 'admin' | 'user'
   created_at: string
   updated_at: string
