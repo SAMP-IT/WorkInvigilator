@@ -57,18 +57,34 @@ export async function GET(request: NextRequest) {
     // Only consider sessions from the last 24 hours to avoid counting old abandoned sessions
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
-    let { data: activeSessions } = await supabaseAdmin
+    const { data: punchedInSessions } = await supabaseAdmin
       .from('recording_sessions')
       .select('id, user_id, session_start_time, total_duration_seconds')
       .eq('organization_id', organizationId)
       .is('session_end_time', null) // NULL = currently punched in
       .gte('session_start_time', twentyFourHoursAgo.toISOString()) // Only last 24 hours
 
-    // Get active user IDs from sessions OR recent screenshots (fallback)
+    let activeSessions: any[] = []
     let activeUserIds: string[] = []
-    if (activeSessions && activeSessions.length > 0) {
-      // Prioritize punch-in sessions
-      activeUserIds = [...new Set(activeSessions.map(s => s.user_id))]
+
+    if (punchedInSessions && punchedInSessions.length > 0) {
+      // We have clocked-in users. Let's verify they are actually active via recent screenshots.
+      const punchedInUserIds = [...new Set(punchedInSessions.map(s => s.user_id))]
+      
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+      const { data: recentScreenshots } = await supabaseAdmin
+        .from('screenshots')
+        .select('user_id')
+        .in('user_id', punchedInUserIds)
+        .gte('created_at', fiveMinutesAgo)
+
+      if (recentScreenshots && recentScreenshots.length > 0) {
+        const recentlyActiveUserIds = [...new Set(recentScreenshots.map(s => s.user_id))]
+        // Filter the original punched-in sessions to only include those who were recently active
+        activeSessions = punchedInSessions.filter(s => recentlyActiveUserIds.includes(s.user_id))
+        activeUserIds = recentlyActiveUserIds
+      }
+      
     } else {
       // Fallback to screenshot-based detection (for backward compatibility)
       const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000)
