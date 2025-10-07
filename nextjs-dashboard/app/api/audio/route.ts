@@ -12,13 +12,6 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate')
 
 
-    if (!employeeId) {
-      return NextResponse.json(
-        { error: 'Employee ID is required' },
-        { status: 400 }
-      )
-    }
-
     if (!organizationId) {
       return NextResponse.json(
         { error: 'Organization ID is required' },
@@ -30,8 +23,11 @@ export async function GET(request: NextRequest) {
     let chunksQuery = supabaseAdmin
       .from('recording_chunks')
       .select('*')
-      .eq('user_id', employeeId)
       .eq('organization_id', organizationId)
+
+    if (employeeId) {
+      chunksQuery = chunksQuery.eq('user_id', employeeId)
+    }
 
     // Apply date filters if provided
     if (startDate) {
@@ -53,12 +49,16 @@ export async function GET(request: NextRequest) {
     const { data: chunks, error: chunksError } = await chunksQuery
 
 
-    // Get employee profile separately
-    const { data: profile } = await supabaseAdmin
+    // Get all employee profiles for mapping names
+    const { data: profiles } = await supabaseAdmin
       .from('profiles')
-      .select('name, email')
-      .eq('id', employeeId)
-      .single()
+      .select('id, name, email')
+      .eq('organization_id', organizationId)
+
+    const profileMap = (profiles || []).reduce((acc, profile) => {
+      acc[profile.id] = profile
+      return acc
+    }, {} as Record<string, { id: string, name: string, email: string }>)
 
     if (chunksError) {
       return NextResponse.json(
@@ -86,12 +86,13 @@ export async function GET(request: NextRequest) {
         const typedChunks = sessionChunks as Array<typeof chunks[number]>
         const totalDuration = typedChunks.reduce((sum, chunk) => sum + (chunk.duration_seconds * 1000 || 0), 0)
         const firstChunk = typedChunks[0]
+        const employeeProfile = profileMap[firstChunk.user_id]
 
         allAudioRecordings.push({
           id: `session-${sessionStart}`,
           type: 'chunked',
           user_id: firstChunk.user_id,
-          employeeName: profile?.name || profile?.email || 'Unknown',
+          employeeName: employeeProfile?.name || employeeProfile?.email || 'Unknown',
           filename: `Session ${new Date(sessionStart).toLocaleDateString()} (${typedChunks.length} chunks)`,
           duration: totalDuration,
           durationFormatted: formatDuration(totalDuration),
@@ -126,10 +127,16 @@ export async function GET(request: NextRequest) {
     allAudioRecordings.sort((a, b) => new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime())
 
     // Get total count for pagination
-    const { count: totalChunks } = await supabaseAdmin
+    let countQuery = supabaseAdmin
       .from('recording_chunks')
       .select('session_start_time', { count: 'exact', head: true })
-      .eq('user_id', employeeId)
+      .eq('organization_id', organizationId)
+    
+    if (employeeId) {
+      countQuery = countQuery.eq('user_id', employeeId)
+    }
+
+    const { count: totalChunks } = await countQuery
 
     // Estimate total count (number of unique sessions)
     const totalCount = allAudioRecordings.length

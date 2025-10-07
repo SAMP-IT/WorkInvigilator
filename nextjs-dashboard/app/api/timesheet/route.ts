@@ -93,13 +93,31 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all recording sessions in the date range
-    const { data: sessions } = await supabaseAdmin
+    // Filter out sessions with unrealistic durations (> 24 hours = 86400 seconds)
+    const { data: allSessions } = await supabaseAdmin
       .from('recording_sessions')
       .select('*')
       .eq('organization_id', organizationId)
       .gte('session_start_time', dateStart.toISOString())
       .lte('session_start_time', dateEnd.toISOString())
       .order('session_start_time', { ascending: false })
+
+    // Filter out corrupted/unrealistic sessions
+    const sessions = allSessions?.filter(session => {
+      // If session has end time, validate the duration
+      if (session.total_duration_seconds && session.total_duration_seconds > 86400) {
+        return false // More than 24 hours - likely corrupted
+      }
+      // If session started more than 24 hours ago and still has no end time, it's stale
+      if (!session.session_end_time) {
+        const startTime = new Date(session.session_start_time).getTime()
+        const hoursSinceStart = (Date.now() - startTime) / (1000 * 60 * 60)
+        if (hoursSinceStart > 24) {
+          return false // Stale session
+        }
+      }
+      return true
+    })
 
     // Get all break sessions in the date range
     const { data: breaks } = await supabaseAdmin
@@ -183,14 +201,15 @@ export async function GET(request: NextRequest) {
       // Calculate work duration (only from this one session, not summing multiple)
       let sessionSeconds = 0
       if (session.session_end_time) {
-        // Completed session
-        sessionSeconds = session.total_duration_seconds || 0
+        // Completed session - cap at 24 hours (86400 seconds)
+        sessionSeconds = Math.min(session.total_duration_seconds || 0, 86400)
         entry.punchOut = session.session_end_time
       } else {
-        // Active session - calculate real-time duration
+        // Active session - calculate real-time duration, cap at 24 hours
         const startTime = new Date(session.session_start_time).getTime()
         const now = Date.now()
-        sessionSeconds = Math.floor((now - startTime) / 1000)
+        const calculatedSeconds = Math.floor((now - startTime) / 1000)
+        sessionSeconds = Math.min(calculatedSeconds, 86400)
         entry.punchOut = 'Active'
       }
 
@@ -207,15 +226,17 @@ export async function GET(request: NextRequest) {
         const entry = timesheetMap.get(key)!
         entry.breaks.push(breakSession)
 
-        // Calculate break duration
+        // Calculate break duration - cap individual breaks at 4 hours (14400 seconds)
         if (breakSession.break_end_time) {
           const breakDurationMs = breakSession.break_duration_ms || 0
-          entry.breakSeconds += Math.floor(breakDurationMs / 1000)
+          const breakSeconds = Math.floor(breakDurationMs / 1000)
+          entry.breakSeconds += Math.min(breakSeconds, 14400)
         } else {
-          // Active break
+          // Active break - cap at 4 hours
           const startTime = new Date(breakSession.break_start_time).getTime()
           const now = Date.now()
-          entry.breakSeconds += Math.floor((now - startTime) / 1000)
+          const breakSeconds = Math.floor((now - startTime) / 1000)
+          entry.breakSeconds += Math.min(breakSeconds, 14400)
         }
       }
     })

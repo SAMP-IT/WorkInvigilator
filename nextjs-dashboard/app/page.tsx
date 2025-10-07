@@ -214,12 +214,6 @@ function HomePageContent() {
             onClick={() => router.push("/sessions")}
           />
           <KpiTile
-            icon={<KpiIcon src="/productivity.png" alt="Productivity" />}
-            label="Productivity %"
-            value={`${kpis.avgProductivity}%`}
-            onClick={() => router.push("/reports")}
-          />
-          <KpiTile
             icon={<KpiIcon src="/focus.png" alt="Focus Time" />}
             label="Avg Focus Time"
             value={`${kpis.avgFocusHours}h`}

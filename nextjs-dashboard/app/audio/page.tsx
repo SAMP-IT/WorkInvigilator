@@ -16,7 +16,7 @@ function AudioPageContent() {
   const { profile } = useAuth();
 
   const [employees, setEmployees] = useState<Profile[]>([]);
-  const [selectedEmployee, setSelectedEmployee] = useState<string>('');
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
   const [userEmailMap, setUserEmailMap] = useState<{ [key: string]: string }>({});
@@ -35,9 +35,7 @@ function AudioPageContent() {
   }, [selectedEmployeeId]);
 
   useEffect(() => {
-    if (selectedEmployee) {
-      loadRecordings(selectedEmployee);
-    }
+    loadRecordings(selectedEmployee);
   }, [selectedEmployee, startDate, endDate]);
 
   async function loadEmployees() {
@@ -54,7 +52,7 @@ function AudioPageContent() {
         setEmployees(data.employees || []);
 
         if (data.employees && data.employees.length > 0 && !selectedEmployee) {
-          setSelectedEmployee(data.employees[0].id);
+          // setSelectedEmployee(data.employees[0].id); // Do not select first employee by default
         }
       }
     } catch (error) {
@@ -74,7 +72,10 @@ function AudioPageContent() {
       }
 
       // Use the new centralized audio API with organization filter and date range
-      let url = `/api/audio?employeeId=${employeeId}&organizationId=${profile.organization_id}`;
+      let url = selectedEmployee === 'all'
+        ? `/api/audio?organizationId=${profile.organization_id}`
+        : `/api/audio?employeeId=${employeeId}&organizationId=${profile.organization_id}`;
+      
       if (startDate) url += `&startDate=${startDate}`;
       if (endDate) url += `&endDate=${endDate}`;
 
@@ -150,10 +151,10 @@ function AudioPageContent() {
                   className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
                   disabled={loading}
                 >
-                  <option value="">Select an employee...</option>
+                  <option value="all">All Employees</option>
                   {employees.map((employee) => (
                     <option key={employee.id} value={employee.id}>
-                      {employee.email}
+                      {employee.name} - {employee.department}
                     </option>
                   ))}
                 </select>
@@ -168,6 +169,7 @@ function AudioPageContent() {
                   onChange={(e) => setStartDate(e.target.value)}
                   className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
                   disabled={loading}
+                  placeholder="Start Date"
                 />
               </div>
               <div>
@@ -180,25 +182,28 @@ function AudioPageContent() {
                   onChange={(e) => setEndDate(e.target.value)}
                   className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
                   disabled={loading}
+                  placeholder="End Date"
                 />
               </div>
             </div>
-            {(startDate || endDate) && (
+            {(selectedEmployee !== 'all' || startDate || endDate) && (
               <div className="mt-3 flex items-center justify-between">
                 <p className="text-sm text-ink-muted">
                   {startDate && endDate ? `Showing recordings from ${startDate} to ${endDate}` :
                    startDate ? `Showing recordings from ${startDate}` :
-                   `Showing recordings until ${endDate}`}
+                   endDate ? `Showing recordings until ${endDate}` :
+                   'Filters applied'}
                 </p>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
+                    setSelectedEmployee('all');
                     setStartDate('');
                     setEndDate('');
                   }}
                 >
-                  Clear Dates
+                  Clear All Filters
                 </Button>
               </div>
             )}
@@ -208,7 +213,11 @@ function AudioPageContent() {
         {/* Audio Recordings */}
         <Card>
           <CardHeader>
-            <CardTitle>Audio Recordings</CardTitle>
+            <CardTitle>
+              {selectedEmployee === 'all'
+                ? 'All Audio Recordings'
+                : `Audio Recordings - ${employees.find(e => e.id === selectedEmployee)?.name || '...'}`}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -370,7 +379,7 @@ function AudioPageContent() {
                   </div>
                 ))}
               </div>
-            ) : selectedEmployee ? (
+            ) : selectedEmployee !== 'all' ? (
               <div className="text-center py-8 text-ink-muted">
                 <div className="text-4xl mb-4">🎤</div>
                 <p className="text-sm">No audio recordings found for this employee</p>
@@ -378,7 +387,7 @@ function AudioPageContent() {
             ) : (
               <div className="text-center py-8 text-ink-muted">
                 <div className="text-4xl mb-4">🎵</div>
-                <p className="text-sm">Select an employee to view their audio recordings</p>
+                <p className="text-sm">No recordings found.</p>
               </div>
             )}
           </CardContent>

@@ -22,6 +22,7 @@ interface Screenshot {
 interface Employee {
   id: string;
   name: string;
+  email: string;
   department?: string;
 }
 
@@ -217,6 +218,7 @@ export default function ScreenshotsPage() {
                 />
               </div>
             </div>
+            {(selectedEmployee !== 'all' || startDate || endDate) && (
             <div className="mt-3 flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <Badge variant="outline">
@@ -230,7 +232,7 @@ export default function ScreenshotsPage() {
                   </p>
                 )}
               </div>
-              {(selectedEmployee !== 'all' || startDate || endDate) && (
+              
                 <Button
                   variant="outline"
                   size="sm"
@@ -242,8 +244,8 @@ export default function ScreenshotsPage() {
                 >
                   Clear All Filters
                 </Button>
-              )}
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

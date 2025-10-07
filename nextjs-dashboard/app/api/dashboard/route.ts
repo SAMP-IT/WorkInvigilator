@@ -182,33 +182,22 @@ export async function GET(request: NextRequest) {
 
     // Calculate average productivity - use screenshots if no sessions
     // For active sessions, calculate real-time duration
-    let totalWorkSeconds = deduplicatedSessions.reduce((sum, s) => {
-      let sessionSeconds = s.total_duration_seconds || 0
-
-      // If session is still active (no end time), calculate duration from start to now
-      if (!s.session_end_time && s.session_start_time) {
-        const startTime = new Date(s.session_start_time).getTime()
-        const now = Date.now()
-        sessionSeconds = Math.floor((now - startTime) / 1000)
-      }
-
-      return sum + sessionSeconds
-    }, 0) || 0
+    let totalWorkSeconds =
+    periodSessions?.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0) || 0
 
     // If no sessions, estimate from screenshots (2 minutes per screenshot)
     if (totalWorkSeconds === 0 && allPeriodScreenshots && allPeriodScreenshots.length > 0) {
       totalWorkSeconds = allPeriodScreenshots.length * 120
     }
 
-    const totalFocusSeconds = periodMetrics?.reduce((sum, m) => sum + (m.focus_time_seconds || 0), 0) ||
-      Math.floor(totalWorkSeconds * 0.85) // Fallback calculation
+    const totalFocusSeconds = periodMetrics?.reduce((sum, m) => sum + (m.focus_time_seconds || 0), 0) || 0
 
     const avgProductivity = totalWorkSeconds > 0 ?
       Number(((totalFocusSeconds / totalWorkSeconds) * 100).toFixed(1)) : 0
 
     // Calculate average focus time per day
     const daysInPeriod = period === 'today' ? 1 : (period === 'week' ? 7 : 30)
-    const avgFocusHours = Number((totalFocusSeconds / (daysInPeriod * 3600)).toFixed(1))
+    const avgFocusHours = totalEmployees > 0 ? Number((totalFocusSeconds / totalEmployees / 3600).toFixed(1)) : 0
 
     // Calculate average session duration
     let avgSessionDuration = 0
@@ -335,7 +324,7 @@ export async function GET(request: NextRequest) {
             name: displayName,
             email: employee.email,
             totalSeconds: estimatedSeconds,
-            focusSeconds: Math.floor(estimatedSeconds * 0.85),
+            focusSeconds: 0, // No actual focus data available
             productivity: 0
           })
         }
