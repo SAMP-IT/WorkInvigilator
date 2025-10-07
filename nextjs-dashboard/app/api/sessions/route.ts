@@ -159,7 +159,15 @@ export async function GET(request: NextRequest) {
         }
 
         // Calculate duration in hours and minutes
-        const totalSeconds = session.total_duration_seconds || 0
+        // For active sessions, calculate duration from start time to now
+        let totalSeconds = session.total_duration_seconds || 0
+        if (!session.session_end_time) {
+          // Active session - calculate real-time duration
+          const startTime = new Date(session.session_start_time).getTime()
+          const now = Date.now()
+          totalSeconds = Math.floor((now - startTime) / 1000)
+        }
+
         const hours = Math.floor(totalSeconds / 3600)
         const minutes = Math.floor((totalSeconds % 3600) / 60)
         const durationFormatted = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
@@ -195,7 +203,18 @@ export async function GET(request: NextRequest) {
 
         // Get employee info from profile map
         const profile = profileMap[session.user_id]
-        const employeeName = profile?.name || profile?.email || 'Unknown Employee'
+
+        // Use email username if name is not set or looks like an ID
+        let employeeName = 'Unknown Employee'
+        if (profile) {
+          if (profile.name && profile.name.trim() !== '' && !profile.name.includes('-')) {
+            employeeName = profile.name
+          } else if (profile.email) {
+            // Extract username from email (part before @)
+            employeeName = profile.email.split('@')[0]
+          }
+        }
+
         const employeeAvatar = employeeName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 
         return {

@@ -38,6 +38,11 @@ const navigationItems = [
     icon: "/focus.png",
   },
   {
+    name: "Timesheet",
+    href: "/timesheet",
+    icon: "/productivity.png",
+  },
+  {
     name: "Reports",
     href: "/reports",
     icon: "/report.png",

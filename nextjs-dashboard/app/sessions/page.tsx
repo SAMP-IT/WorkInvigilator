@@ -303,7 +303,6 @@ export default function SessionsPage() {
                       />
                       <div>
                         <div className="font-medium text-ink-hi">{session.employeeName}</div>
-                        <div className="text-sm text-ink-muted">ID: {session.employeeId}</div>
                       </div>
                     </div>
                   </TableCell>

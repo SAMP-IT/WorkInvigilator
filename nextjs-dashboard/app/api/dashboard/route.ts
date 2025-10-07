@@ -54,11 +54,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all active sessions (employees who are punched in)
+    // Only consider sessions from the last 24 hours to avoid counting old abandoned sessions
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
     let { data: activeSessions } = await supabaseAdmin
       .from('recording_sessions')
       .select('id, user_id, session_start_time, total_duration_seconds')
       .eq('organization_id', organizationId)
       .is('session_end_time', null) // NULL = currently punched in
+      .gte('session_start_time', twentyFourHoursAgo.toISOString()) // Only last 24 hours
 
     // Get active user IDs from sessions OR recent screenshots (fallback)
     let activeUserIds: string[] = []
@@ -165,8 +169,31 @@ export async function GET(request: NextRequest) {
     const totalEmployees = allEmployees?.length || 0
     const activeEmployees = activeUserIds.length
 
+    // Deduplicate sessions - keep only most recent session per user
+    const uniqueSessions = new Map<string, any>()
+    periodSessions?.forEach(session => {
+      const existing = uniqueSessions.get(session.user_id)
+      if (!existing || new Date(session.session_start_time) > new Date(existing.session_start_time)) {
+        uniqueSessions.set(session.user_id, session)
+      }
+    })
+
+    const deduplicatedSessions = Array.from(uniqueSessions.values())
+
     // Calculate average productivity - use screenshots if no sessions
-    let totalWorkSeconds = periodSessions?.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0) || 0
+    // For active sessions, calculate real-time duration
+    let totalWorkSeconds = deduplicatedSessions.reduce((sum, s) => {
+      let sessionSeconds = s.total_duration_seconds || 0
+
+      // If session is still active (no end time), calculate duration from start to now
+      if (!s.session_end_time && s.session_start_time) {
+        const startTime = new Date(s.session_start_time).getTime()
+        const now = Date.now()
+        sessionSeconds = Math.floor((now - startTime) / 1000)
+      }
+
+      return sum + sessionSeconds
+    }, 0) || 0
 
     // If no sessions, estimate from screenshots (2 minutes per screenshot)
     if (totalWorkSeconds === 0 && allPeriodScreenshots && allPeriodScreenshots.length > 0) {
@@ -185,15 +212,26 @@ export async function GET(request: NextRequest) {
 
     // Calculate average session duration
     let avgSessionDuration = 0
-    if (periodSessions && periodSessions.length > 0) {
-      avgSessionDuration = Math.round((totalWorkSeconds / periodSessions.length) / 60)
+    if (deduplicatedSessions.length > 0) {
+      avgSessionDuration = Math.round((totalWorkSeconds / deduplicatedSessions.length) / 60)
     } else if (totalWorkSeconds > 0) {
       // Estimate average session from total work time
       avgSessionDuration = Math.round(totalWorkSeconds / 60 / daysInPeriod)
     }
 
     // Get recent active sessions with more details
-    const recentActiveSessions = activeSessions?.slice(0, 4).map(session => {
+    // Group by user_id to show only one session per employee (the most recent one)
+    const sessionsByUser = new Map<string, any>()
+    activeSessions?.forEach(session => {
+      const existing = sessionsByUser.get(session.user_id)
+      if (!existing || new Date(session.session_start_time) > new Date(existing.session_start_time)) {
+        sessionsByUser.set(session.user_id, session)
+      }
+    })
+
+    const uniqueActiveSessions = Array.from(sessionsByUser.values())
+
+    const recentActiveSessions = uniqueActiveSessions.map(session => {
       const startTime = new Date(session.session_start_time)
       const now = new Date()
       const durationMs = now.getTime() - startTime.getTime()
@@ -202,7 +240,17 @@ export async function GET(request: NextRequest) {
       const durationSeconds = Math.floor((durationMs % (1000 * 60)) / 1000)
 
       const profile = activeProfileMap[session.user_id]
-      
+
+      // Get employee name - use email username if name is not set or looks like an ID
+      let employeeName = 'Unknown'
+      if (profile) {
+        if (profile.name && profile.name.trim() !== '' && !profile.name.includes('-')) {
+          employeeName = profile.name
+        } else if (profile.email) {
+          employeeName = profile.email.split('@')[0]
+        }
+      }
+
       // Format duration based on how long the session has been running
       let durationFormatted = ''
       if (durationHours > 0) {
@@ -212,11 +260,11 @@ export async function GET(request: NextRequest) {
       } else {
         durationFormatted = `${durationSeconds}s`
       }
-      
+
       return {
         id: session.id,
         employeeId: session.user_id,
-        employeeName: profile?.name || profile?.email || 'Unknown',
+        employeeName,
         startTime: startTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
         duration: durationFormatted,
         status: 'active' as const
@@ -239,8 +287,16 @@ export async function GET(request: NextRequest) {
         const employee = allEmployees?.find(emp => emp.id === session.user_id)
 
         if (employee) {
+          // Use email username if name is not set or looks like an ID
+          let displayName = employee.email
+          if (employee.name && employee.name.trim() !== '' && !employee.name.includes('-')) {
+            displayName = employee.name
+          } else if (employee.email) {
+            displayName = employee.email.split('@')[0]
+          }
+
           employeeProductivity.set(session.user_id, {
-            name: employee.name || employee.email,
+            name: displayName,
             email: employee.email,
             totalSeconds: (existing?.totalSeconds || 0) + (session.total_duration_seconds || 0),
             focusSeconds: existing?.focusSeconds || 0,
@@ -266,9 +322,17 @@ export async function GET(request: NextRequest) {
       Object.entries(screenshotsByUser).forEach(([userId, count]) => {
         const employee = allEmployees?.find(emp => emp.id === userId)
         if (employee) {
+          // Use email username if name is not set or looks like an ID
+          let displayName = employee.email
+          if (employee.name && employee.name.trim() !== '' && !employee.name.includes('-')) {
+            displayName = employee.name
+          } else if (employee.email) {
+            displayName = employee.email.split('@')[0]
+          }
+
           const estimatedSeconds = count * 120 // 2 minutes per screenshot
           employeeProductivity.set(userId, {
-            name: employee.name || employee.email,
+            name: displayName,
             email: employee.email,
             totalSeconds: estimatedSeconds,
             focusSeconds: Math.floor(estimatedSeconds * 0.85),
@@ -300,10 +364,21 @@ export async function GET(request: NextRequest) {
     // Format recent screenshots for dashboard
     const recentScreenshots = periodScreenshots?.map(screenshot => {
       const profile = screenshotProfileMap[screenshot.user_id]
+
+      // Use email username if name is not set or looks like an ID
+      let employeeName = 'Unknown'
+      if (profile) {
+        if (profile.name && profile.name.trim() !== '' && !profile.name.includes('-')) {
+          employeeName = profile.name
+        } else if (profile.email) {
+          employeeName = profile.email.split('@')[0]
+        }
+      }
+
       return {
         id: screenshot.id,
         employeeId: screenshot.user_id,
-        employeeName: profile?.name || profile?.email || 'Unknown',
+        employeeName,
         timestamp: new Date(screenshot.created_at).toLocaleString('en-GB', {
           day: '2-digit',
           month: '2-digit',
