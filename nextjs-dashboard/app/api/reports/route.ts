@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
     // Add period-specific breakdowns
     if (period === 'daily' && sessions) {
       const breakdowns = sessions.map(session => ({
-        time: `${new Date(session.session_start_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}-${session.session_end_time ? new Date(session.session_end_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : 'Active'}`,
+        time: `${new Date(session.session_start_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/New_York' })}-${session.session_end_time ? new Date(session.session_end_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/New_York' }) : 'Active'}`,
         activity: 'Work Session',
         focus: Math.round(((session.total_duration_seconds || 0) * 0.85 / (session.total_duration_seconds || 1)) * 100)
       }))
