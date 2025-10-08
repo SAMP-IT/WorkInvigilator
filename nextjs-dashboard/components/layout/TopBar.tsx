@@ -167,23 +167,6 @@ export function TopBar() {
 
       {/* Right section */}
       <div className="flex items-center space-x-4">
-        {/* Date range picker */}
-        <div className="flex items-center space-x-2">
-          <select
-            value={dateRange}
-            onChange={(e) => handleDateRangeChange(e.target.value)}
-            className="bg-surface border border-line rounded-lg px-3 py-1.5 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            <option>Today</option>
-            <option>Last 7 days</option>
-            <option>Last 14 days</option>
-            <option>Last 30 days</option>
-            <option>Last 90 days</option>
-            <option>This month</option>
-            <option>Custom range</option>
-          </select>
-        </div>
-
         {/* User menu */}
         <div className="relative" ref={menuRef}>
           <div className="flex items-center space-x-3">
