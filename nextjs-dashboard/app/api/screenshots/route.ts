@@ -66,7 +66,9 @@ export async function GET(request: NextRequest) {
         month: '2-digit',
         year: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'America/New_York'
       })
 
       // Estimate file size (placeholder since we don't store it)

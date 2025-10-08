@@ -103,7 +103,9 @@ export async function GET(request: NextRequest) {
             month: '2-digit',
             year: 'numeric',
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            hour12: false,
+            timeZone: 'America/New_York'
           }),
           file_size: null,
           session_info: {
