@@ -16,6 +16,15 @@ import {
   TableCell
 } from '@/components/ui/Table';
 
+interface SessionDetail {
+  id: string;
+  punchIn: string;
+  punchOut: string;
+  duration: number;
+  startTime: string;
+  endTime: string | null;
+}
+
 interface TimesheetEntry {
   employeeId: string;
   employeeName: string;
@@ -27,6 +36,8 @@ interface TimesheetEntry {
   breakHours: number;
   netHours: number;
   status: 'completed' | 'active' | 'absent';
+  sessionCount: number;
+  sessionDetails: SessionDetail[];
 }
 
 interface Employee {
@@ -45,6 +56,7 @@ export default function TimesheetPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [dateRange, setDateRange] = useState('today');
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   // Set default dates to current date
   const getCurrentDate = () => {
@@ -169,6 +181,16 @@ export default function TimesheetPage() {
       // 1 hour or more - show in hours
       return `${hours.toFixed(2)}h`;
     }
+  };
+
+  const toggleRowExpansion = (key: string) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    setExpandedRows(newExpanded);
   };
 
   return (
@@ -319,6 +341,7 @@ export default function TimesheetPage() {
                 <TableHead>Punch Out</TableHead>
                 <TableHead>Work Hours</TableHead>
                 <TableHead>Break Hours</TableHead>
+                <TableHead>Sessions</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -332,12 +355,13 @@ export default function TimesheetPage() {
                     <TableCell><div className="h-4 bg-gray-300 rounded w-20 animate-pulse"></div></TableCell>
                     <TableCell><div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
                     <TableCell><div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
+                    <TableCell><div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
                     <TableCell><div className="h-6 bg-gray-300 rounded w-20 animate-pulse"></div></TableCell>
                   </TableRow>
                 ))
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={8} className="text-center py-8">
                     <div className="text-danger text-sm">{error}</div>
                     <Button variant="outline" size="sm" onClick={loadTimesheetData} className="mt-2">
                       Try Again
@@ -346,38 +370,96 @@ export default function TimesheetPage() {
                 </TableRow>
               ) : filteredData.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={8} className="text-center py-8">
                     <div className="text-ink-muted">
                       {searchTerm ? 'No employees found matching your search.' : 'No timesheet data available for this period.'}
                     </div>
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredData.map((entry) => (
-                  <TableRow key={`${entry.employeeId}-${entry.date}`}>
-                    <TableCell>
-                      <div className="font-medium text-ink-hi">{entry.employeeName}</div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-sm text-ink-mid">{entry.date}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-sm text-ink-hi">{entry.punchIn}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-sm text-ink-hi">{entry.punchOut}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-ink-mid">{entry.workHours.toFixed(2)}h</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-ink-mid">{formatBreakTime(entry.breakHours)}</span>
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(entry.status)}
-                    </TableCell>
-                  </TableRow>
-                ))
+                filteredData.map((entry) => {
+                  const rowKey = `${entry.employeeId}-${entry.date}`;
+                  const isExpanded = expandedRows.has(rowKey);
+
+                  return (
+                    <>
+                      <TableRow key={rowKey}>
+                        <TableCell>
+                          <div className="font-medium text-ink-hi">{entry.employeeName}</div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono text-sm text-ink-mid">{entry.date}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono text-sm text-ink-hi">{entry.punchIn}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono text-sm text-ink-hi">{entry.punchOut}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono text-ink-mid">{entry.workHours.toFixed(2)}h</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono text-ink-mid">{formatBreakTime(entry.breakHours)}</span>
+                        </TableCell>
+                        <TableCell>
+                          {entry.sessionCount > 0 ? (
+                            <button
+                              onClick={() => toggleRowExpansion(rowKey)}
+                              className="flex items-center space-x-2 text-sm text-primary hover:text-primary/80 transition-colors"
+                            >
+                              <Badge variant="info" size="sm">
+                                {entry.sessionCount} {entry.sessionCount === 1 ? 'session' : 'sessions'}
+                              </Badge>
+                              <svg
+                                className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                          ) : (
+                            <span className="text-sm text-ink-muted">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {getStatusBadge(entry.status)}
+                        </TableCell>
+                      </TableRow>
+
+                      {isExpanded && entry.sessionDetails.length > 0 && (
+                        <TableRow key={`${rowKey}-details`} className="bg-surface/50">
+                          <TableCell colSpan={8} className="py-4">
+                            <div className="ml-8 space-y-2">
+                              <div className="text-sm font-medium text-ink-mid mb-3">Session Details:</div>
+                              <div className="space-y-2">
+                                {entry.sessionDetails.map((session, idx) => (
+                                  <div key={session.id} className="flex items-center space-x-4 text-sm p-2 bg-background rounded border border-line">
+                                    <Badge size="sm" variant="outline">Session {idx + 1}</Badge>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-ink-muted">In:</span>
+                                      <span className="font-mono text-ink-hi">{session.punchIn}</span>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-ink-muted">Out:</span>
+                                      <span className="font-mono text-ink-hi">{session.punchOut}</span>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-ink-muted">Duration:</span>
+                                      <span className="font-mono text-ink-mid">{(session.duration / 3600).toFixed(2)}h</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  );
+                })
               )}
             </TableBody>
           </Table>

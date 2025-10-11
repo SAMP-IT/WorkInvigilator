@@ -298,6 +298,16 @@ export async function GET(request: NextRequest) {
         })
       }
 
+      // Format individual sessions
+      const sessionDetails = entry.sessions.map((session: any) => ({
+        id: session.id,
+        punchIn: formatTime(session.session_start_time),
+        punchOut: session.session_end_time ? formatTime(session.session_end_time) : 'Active',
+        duration: session.total_duration_seconds || 0,
+        startTime: session.session_start_time,
+        endTime: session.session_end_time
+      }))
+
       return {
         employeeId: entry.employeeId,
         employeeName: entry.employeeName,
@@ -312,7 +322,9 @@ export async function GET(request: NextRequest) {
         workHours,
         breakHours,
         netHours,
-        status
+        status,
+        sessionCount: entry.sessions.length,
+        sessionDetails
       }
     })
 
