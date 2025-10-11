@@ -15,7 +15,10 @@ class WorkInvigilatorApp {
     this.breakStartTime = null;
     this.dailyBreakDuration = 0;
     this.breakHistory = [];
-    
+    this.breakTimerInterval = null;
+    this.totalWorkTime = 0;
+    this.totalBreakTime = 0;
+
     // Recording
     this.mediaRecorder = null;
     this.audioChunks = [];
@@ -81,7 +84,13 @@ class WorkInvigilatorApp {
       breakToggleBtn: document.getElementById('break-toggle-btn'),
       breakIcon: document.getElementById('break-icon'),
       breakText: document.getElementById('break-text'),
-      
+      breakTimerDisplay: document.getElementById('break-timer-display'),
+      breakTimer: document.getElementById('break-timer'),
+
+      // Work Stats
+      totalWorkTime: document.getElementById('total-work-time'),
+      totalBreakTime: document.getElementById('total-break-time'),
+
       // Other
       permissionStatus: document.getElementById('permission-status'),
       permissionText: document.getElementById('permission-text')
@@ -528,50 +537,50 @@ class WorkInvigilatorApp {
           sampleRate: 44100
         }
       });
-      
+
       this.mediaRecorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus'
       });
-      
+
       this.sessionChunks = [];
       this.currentChunkStartTime = Date.now();
       this.audioChunks = [];
-      
+
       this.mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           this.audioChunks.push(event.data);
         }
       };
-      
+
       this.mediaRecorder.onstop = async () => {
         if (this.audioChunks.length > 0) {
           await this.saveCurrentChunk();
         }
-        
+
         // Only clear interval and stop tracks if this is a final stop (not a chunk save)
         if (!this.isStoppingForChunk) {
           if (this.chunkInterval) {
             clearInterval(this.chunkInterval);
             this.chunkInterval = null;
           }
-          
+
           stream.getTracks().forEach(track => track.stop());
         } else {
           // Reset flag and restart recording for next chunk
           this.isStoppingForChunk = false;
           this.audioChunks = [];
           this.currentChunkStartTime = Date.now();
-          
+
           // Restart recording immediately
           if (this.mediaRecorder) {
             this.mediaRecorder.start();
           }
         }
       };
-      
+
       // Start recording without timeslice to get complete WebM files
       this.mediaRecorder.start();
-      
+
       // Auto-save chunks every 5 minutes by stopping and restarting
       this.chunkInterval = setInterval(async () => {
         if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
@@ -581,7 +590,7 @@ class WorkInvigilatorApp {
           this.mediaRecorder.stop();
         }
       }, this.CHUNK_DURATION);
-      
+
     } catch (error) {
       console.error('❌ Failed to start recording:', error);
       throw error;
@@ -593,34 +602,52 @@ class WorkInvigilatorApp {
       return new Promise((resolve) => {
         // Ensure this is treated as a final stop, not a chunk save
         this.isStoppingForChunk = false;
-        
+
         this.mediaRecorder.onstop = async (event) => {
           if (this.audioChunks.length > 0) {
             await this.saveCurrentChunk();
           }
-          
+
           if (this.chunkInterval) {
             clearInterval(this.chunkInterval);
             this.chunkInterval = null;
           }
-          
-          this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+
+          this.mediaRecorder.stream.getTracks().forEach(track => {
+            track.stop();
+          });
+
           resolve();
         };
-        
+
         this.mediaRecorder.stop();
       });
     }
   }
   
   async saveCurrentChunk() {
+    console.log('💾 [AUDIO] saveCurrentChunk called');
+    console.log('💾 [AUDIO] Supabase client exists?', !!this.supabase);
+    console.log('💾 [AUDIO] Current user exists?', !!this.currentUser);
+    console.log('💾 [AUDIO] Audio chunks count:', this.audioChunks.length);
+
     if (!this.supabase || !this.currentUser || this.audioChunks.length === 0) {
+      console.warn('⚠️ [AUDIO] Cannot save chunk - missing prerequisites:', {
+        hasSupabase: !!this.supabase,
+        hasUser: !!this.currentUser,
+        chunksCount: this.audioChunks.length
+      });
       return;
     }
 
     try {
+      console.log('💾 [AUDIO] Creating blob from audio chunks...');
       const chunkBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+      console.log('💾 [AUDIO] Blob created. Size:', chunkBlob.size, 'bytes', 'Type:', chunkBlob.type);
+
       const arrayBuffer = await chunkBlob.arrayBuffer();
+      console.log('💾 [AUDIO] ArrayBuffer created. Byte length:', arrayBuffer.byteLength);
+
       const chunkDuration = Math.floor((Date.now() - this.currentChunkStartTime) / 1000);
       const now = new Date();
       const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
@@ -629,12 +656,22 @@ class WorkInvigilatorApp {
       const userEmail = this.currentUser.email || this.currentUser.id;
       const filename = `${userEmail}/${date}/${time}_chunk_${chunkNumber}.webm`;
 
+      console.log('💾 [AUDIO] Chunk metadata:', {
+        chunkNumber,
+        duration: chunkDuration + 's',
+        filename,
+        userEmail,
+        organizationId: this.organizationId
+      });
+
       let primaryUrl = null;
       let backupUrl = null;
 
       // Try Backblaze first (if enabled)
+      console.log('☁️ [BACKBLAZE] Enabled?', this.backblazeEnabled);
       if (this.backblazeEnabled) {
         try {
+          console.log('☁️ [BACKBLAZE] Starting upload...');
           const { data: backblazeData, error: backblazeError } = await window.electronAPI.backblazeStorage('upload', {
             bucket: 'audio-recordings',
             path: filename,
@@ -643,73 +680,106 @@ class WorkInvigilatorApp {
 
           if (!backblazeError && backblazeData) {
             primaryUrl = backblazeData.publicUrl;
+            console.log('✅ [BACKBLAZE] Upload successful. URL:', primaryUrl);
           } else {
-            console.error('❌ FAILED: Backblaze upload error:', backblazeError);
+            console.error('❌ [BACKBLAZE] Upload failed:', backblazeError);
           }
         } catch (error) {
-          console.error('❌ FAILED: Backblaze upload exception:', error.message);
+          console.error('❌ [BACKBLAZE] Upload exception:', {
+            message: error.message,
+            name: error.name,
+            stack: error.stack
+          });
         }
+      } else {
+        console.log('⏭️ [BACKBLAZE] Skipped (disabled)');
       }
 
       // Always upload to Supabase (as backup or primary)
+      console.log('☁️ [SUPABASE] Starting storage upload...');
       let uploadData, uploadError;
-      
+
       try {
         const uploadResult = await this.supabase.storage
           .from('audio-recordings')
           .upload(filename, arrayBuffer);
         uploadData = uploadResult.data;
         uploadError = uploadResult.error;
+
+        console.log('☁️ [SUPABASE] Upload result:', {
+          hasData: !!uploadData,
+          hasError: !!uploadError,
+          error: uploadError
+        });
       } catch (error) {
         uploadError = error;
+        console.error('❌ [SUPABASE] Upload exception:', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack
+        });
       }
 
       // If token expired, refresh and retry once
       if (uploadError && (uploadError.message?.includes('exp') || uploadError.message?.includes('token'))) {
+        console.log('🔄 [SUPABASE] Token expired, refreshing and retrying...');
         await this.refreshAuthToken();
-        
+
         const retryResult = await this.supabase.storage
           .from('audio-recordings')
           .upload(filename, arrayBuffer);
         uploadData = retryResult.data;
         uploadError = retryResult.error;
+
+        console.log('🔄 [SUPABASE] Retry result:', {
+          hasData: !!uploadData,
+          hasError: !!uploadError,
+          error: uploadError
+        });
       }
 
       if (uploadError) {
-        console.error('❌ FAILED: Supabase audio upload error:', uploadError);
+        console.error('❌ [SUPABASE] Upload error:', uploadError);
         // If both failed, return
         if (!primaryUrl) {
-          console.error('💥 CRITICAL: Both Backblaze and Supabase failed for audio chunk', chunkNumber);
+          console.error('💥 [CRITICAL] Both Backblaze and Supabase failed for chunk', chunkNumber);
           return;
         }
       } else {
+        console.log('☁️ [SUPABASE] Getting public URL...');
         const urlData = await this.supabase.storage
           .from('audio-recordings')
           .getPublicUrl(filename);
 
         backupUrl = urlData.publicUrl;
+        console.log('✅ [SUPABASE] Public URL obtained:', backupUrl);
 
         if (!primaryUrl) {
           // If Backblaze failed/disabled, use Supabase as primary
           primaryUrl = backupUrl;
+          console.log('ℹ️ [SUPABASE] Using Supabase as primary storage');
         }
       }
 
       // Save to database with primary URL and backup URL
+      console.log('💾 [DATABASE] Inserting chunk record...');
+      const dbRecord = {
+        user_id: this.currentUser.id,
+        organization_id: this.organizationId,
+        session_start_time: this.sessionStartTime ? this.sessionStartTime.toISOString() : new Date().toISOString(),
+        chunk_number: chunkNumber,
+        filename: filename,
+        file_url: primaryUrl,
+        backup_file_url: backupUrl,
+        storage_provider: this.backblazeEnabled ? 'backblaze' : 'supabase',
+        duration_seconds: chunkDuration,
+        chunk_start_time: new Date(this.currentChunkStartTime).toISOString()
+      };
+      console.log('💾 [DATABASE] Record to insert:', dbRecord);
+
       const { error: dbError } = await this.supabase
         .from('recording_chunks')
-        .insert([{
-          user_id: this.currentUser.id,
-          organization_id: this.organizationId,
-          session_start_time: this.sessionStartTime ? this.sessionStartTime.toISOString() : new Date().toISOString(),
-          chunk_number: chunkNumber,
-          filename: filename,
-          file_url: primaryUrl,
-          backup_file_url: backupUrl,
-          storage_provider: this.backblazeEnabled ? 'backblaze' : 'supabase',
-          duration_seconds: chunkDuration,
-          chunk_start_time: new Date(this.currentChunkStartTime).toISOString()
-        }]);
+        .insert([dbRecord]);
 
       if (!dbError) {
         this.sessionChunks.push({
@@ -718,34 +788,51 @@ class WorkInvigilatorApp {
           file_url: primaryUrl,
           duration: chunkDuration
         });
+        console.log('✅ [DATABASE] Chunk record inserted successfully. Total session chunks:', this.sessionChunks.length);
       } else {
-        console.error('❌ FAILED: Database insert error for chunk', chunkNumber, dbError);
+        console.error('❌ [DATABASE] Insert failed for chunk', chunkNumber, {
+          error: dbError,
+          message: dbError.message,
+          details: dbError.details,
+          hint: dbError.hint
+        });
       }
 
     } catch (error) {
-      console.error('💥 Save chunk error:', error);
+      console.error('💥 [AUDIO] Save chunk error:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
     }
   }
   
   startBreak() {
     if (!this.isMonitoring || this.isOnBreak) return;
-    
+
     this.isOnBreak = true;
     this.breakStartTime = new Date();
-    
+
     if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
       this.mediaRecorder.pause();
     }
-    
+
+    // Start break timer
+    this.startBreakTimer();
+
     this.updateBreakUI(true);
   }
   
   async endBreak() {
     if (!this.isOnBreak) return;
-    
+
     const breakDuration = Date.now() - this.breakStartTime.getTime();
     this.dailyBreakDuration += breakDuration;
-    
+    this.totalBreakTime += breakDuration;
+
+    // Stop break timer
+    this.stopBreakTimer();
+
     // Save break session
     await this.supabase
       .from('break_sessions')
@@ -758,14 +845,17 @@ class WorkInvigilatorApp {
         break_duration_ms: breakDuration,
         session_type: 'manual'
       }]);
-    
+
     this.isOnBreak = false;
     this.breakStartTime = null;
-    
+
     if (this.mediaRecorder && this.mediaRecorder.state === 'paused') {
       this.mediaRecorder.resume();
     }
-    
+
+    // Update total break time display
+    this.updateWorkStats();
+
     this.updateBreakUI(false);
   }
   
@@ -774,6 +864,9 @@ class WorkInvigilatorApp {
       if (this.sessionStartTime && !this.isOnBreak) {
         const elapsed = Date.now() - this.sessionStartTime.getTime();
         this.elements.sessionTimer.textContent = this.formatTime(elapsed);
+
+        // Update work stats every second
+        this.updateWorkStats();
       }
     }, 1000);
   }
@@ -785,7 +878,56 @@ class WorkInvigilatorApp {
     }
     this.elements.sessionTimer.textContent = '00:00:00';
   }
-  
+
+  startBreakTimer() {
+    // Show break timer display
+    if (this.elements.breakTimerDisplay) {
+      this.elements.breakTimerDisplay.classList.remove('hidden');
+    }
+
+    this.breakTimerInterval = setInterval(() => {
+      if (this.breakStartTime && this.isOnBreak) {
+        const elapsed = Date.now() - this.breakStartTime.getTime();
+        if (this.elements.breakTimer) {
+          this.elements.breakTimer.textContent = this.formatTime(elapsed);
+        }
+      }
+    }, 1000);
+  }
+
+  stopBreakTimer() {
+    if (this.breakTimerInterval) {
+      clearInterval(this.breakTimerInterval);
+      this.breakTimerInterval = null;
+    }
+
+    // Hide break timer display
+    if (this.elements.breakTimerDisplay) {
+      this.elements.breakTimerDisplay.classList.add('hidden');
+    }
+
+    if (this.elements.breakTimer) {
+      this.elements.breakTimer.textContent = '00:00:00';
+    }
+  }
+
+  updateWorkStats() {
+    // Calculate total work time (session time - break time)
+    if (this.sessionStartTime && !this.isOnBreak) {
+      const sessionElapsed = Date.now() - this.sessionStartTime.getTime();
+      this.totalWorkTime = sessionElapsed - this.totalBreakTime;
+
+      if (this.elements.totalWorkTime) {
+        this.elements.totalWorkTime.textContent = this.formatTime(this.totalWorkTime);
+      }
+    }
+
+    // Update total break time display
+    if (this.elements.totalBreakTime) {
+      this.elements.totalBreakTime.textContent = this.formatTime(this.totalBreakTime);
+    }
+  }
+
   startScreenshotCapture() {
     this.screenshotInterval = setInterval(async () => {
       if (this.isMonitoring && !this.isOnBreak) {

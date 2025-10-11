@@ -73,12 +73,11 @@ export async function GET(request: NextRequest) {
         dateStart.setHours(0, 0, 0, 0)
     }
 
-    // Get all employees in the organization
+    // Get all employees in the organization (including admins)
     const { data: employees } = await supabaseAdmin
       .from('profiles')
       .select('id, name, email, department')
       .eq('organization_id', organizationId)
-      .neq('role', 'admin')
 
     if (!employees || employees.length === 0) {
       return NextResponse.json({
@@ -140,36 +139,26 @@ export async function GET(request: NextRequest) {
 
     const activeUserIds = new Set(recentScreenshots?.map(s => s.user_id) || [])
 
-    // First, deduplicate sessions - keep only the most recent session per user per day
-    const sessionsByUserDate = new Map<string, any>()
+    // Process all sessions - aggregate multiple sessions per user per day
     sessions?.forEach(session => {
-      const sessionDate = new Date(session.session_start_time)
-      const dateKey = sessionDate.toISOString().split('T')[0]
-      const key = `${session.user_id}_${dateKey}`
+      // Check if this is truly active (has screenshots in last 15 min) or completed
+      const isActive = !session.session_end_time && activeUserIds.has(session.user_id)
+      const isCompleted = !!session.session_end_time
 
-      const existing = sessionsByUserDate.get(key)
-      if (!existing || new Date(session.session_start_time) > new Date(existing.session_start_time)) {
-        // Check if this is truly active (has screenshots in last 15 min) or completed
-        const isActive = !session.session_end_time && activeUserIds.has(session.user_id)
-        const isCompleted = !!session.session_end_time
-
-        // Only include if active with recent screenshots, or completed
-        if (isCompleted || isActive) {
-          sessionsByUserDate.set(key, session)
-        }
+      // Only include if active with recent screenshots, or completed
+      if (!isCompleted && !isActive) {
+        return
       }
-    })
 
-    // Process deduplicated sessions
-    Array.from(sessionsByUserDate.values()).forEach(session => {
       const sessionDate = new Date(session.session_start_time)
       const dateKey = sessionDate.toISOString().split('T')[0]
       const key = `${session.user_id}_${dateKey}`
 
+      // Initialize entry if it doesn't exist
       if (!timesheetMap.has(key)) {
         const employee = employees.find(emp => emp.id === session.user_id)
 
-        // Get employee name - use email username if name is not set or looks like an ID
+        // Get employee name - prioritize name field, fallback to email username
         let employeeName = 'Unknown'
         if (employee) {
           if (employee.name && employee.name.trim() !== '' && !employee.name.includes('-')) {
@@ -182,28 +171,36 @@ export async function GET(request: NextRequest) {
         timesheetMap.set(key, {
           employeeId: session.user_id,
           employeeName,
+          employeeDepartment: employee?.department || 'N/A',
           date: dateKey,
           sessions: [],
           breaks: [],
           punchIn: null,
           punchOut: null,
           workSeconds: 0,
-          breakSeconds: 0
+          breakSeconds: 0,
+          hasActiveSession: false
         })
       }
 
       const entry = timesheetMap.get(key)!
       entry.sessions.push(session)
 
-      // Set punch in and punch out times
-      entry.punchIn = session.session_start_time
+      // Set punch in to earliest session start time
+      if (!entry.punchIn || new Date(session.session_start_time) < new Date(entry.punchIn)) {
+        entry.punchIn = session.session_start_time
+      }
 
-      // Calculate work duration (only from this one session, not summing multiple)
+      // Calculate work duration for this session
       let sessionSeconds = 0
       if (session.session_end_time) {
         // Completed session - cap at 24 hours (86400 seconds)
         sessionSeconds = Math.min(session.total_duration_seconds || 0, 86400)
-        entry.punchOut = session.session_end_time
+
+        // Set punch out to latest session end time
+        if (!entry.punchOut || entry.punchOut === 'Active' || new Date(session.session_end_time) > new Date(entry.punchOut as string)) {
+          entry.punchOut = session.session_end_time
+        }
       } else {
         // Active session - calculate real-time duration, cap at 24 hours
         const startTime = new Date(session.session_start_time).getTime()
@@ -211,9 +208,11 @@ export async function GET(request: NextRequest) {
         const calculatedSeconds = Math.floor((now - startTime) / 1000)
         sessionSeconds = Math.min(calculatedSeconds, 86400)
         entry.punchOut = 'Active'
+        entry.hasActiveSession = true
       }
 
-      entry.workSeconds = sessionSeconds
+      // Sum all session durations
+      entry.workSeconds += sessionSeconds
     })
 
     // Process breaks
@@ -259,13 +258,15 @@ export async function GET(request: NextRequest) {
           timesheetMap.set(key, {
             employeeId: employee.id,
             employeeName,
+            employeeDepartment: employee.department || 'N/A',
             date: dateKey,
             sessions: [],
             breaks: [],
             punchIn: '-',
             punchOut: '-',
             workSeconds: 0,
-            breakSeconds: 0
+            breakSeconds: 0,
+            hasActiveSession: false
           })
         }
       })
@@ -297,12 +298,10 @@ export async function GET(request: NextRequest) {
         })
       }
 
-      const employee = employees.find(emp => emp.id === entry.employeeId)
-
       return {
         employeeId: entry.employeeId,
         employeeName: entry.employeeName,
-        employeeDepartment: employee?.department || 'N/A',
+        employeeDepartment: entry.employeeDepartment,
         date: new Date(entry.date).toLocaleDateString('en-GB', {
           day: '2-digit',
           month: '2-digit',

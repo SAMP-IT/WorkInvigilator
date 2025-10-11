@@ -358,7 +358,9 @@ body {
 .break-panel {
   margin-top: 20px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
 }
 
 .break-toggle-btn {
@@ -388,6 +390,31 @@ body {
 .break-toggle-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.break-timer {
+  background: rgba(245, 166, 35, 0.1);
+  border: 1px solid rgba(245, 166, 35, 0.3);
+  border-radius: 8px;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.break-timer-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 500;
+}
+
+.break-timer-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #f5a623;
+  font-family: 'Monaco', 'Courier New', monospace;
 }
 
 /* Permission Card */

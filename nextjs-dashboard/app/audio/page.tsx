@@ -338,7 +338,12 @@ function AudioPageContent() {
                       <div className="mt-4 pl-4 border-l-2 border-primary/20">
                         <h4 className="text-sm font-medium text-ink-hi mb-3">Audio Chunks ({recording.session_info.chunks.length})</h4>
                         <div className="space-y-3">
-                          {recording.session_info.chunks.map((chunk: { id: string; chunk_number: number; duration_seconds: number; chunk_start_time: string; file_url: string; filename: string }) => (
+                          {recording.session_info.chunks.map((chunk: { id: string; chunk_number: number; duration_seconds: number; chunk_start_time: string; file_url: string; filename: string }) => {
+                            // Extract email from filename (format: email/date/time_chunk_X.webm)
+                            const filenameParts = chunk.filename.split('/');
+                            const employeeEmail = filenameParts[0] || recording.employeeName;
+
+                            return (
                             <div key={chunk.id} className="p-3 bg-surface rounded-lg border border-line">
                               <div className="flex items-center justify-between">
                                 <div className="flex-1">
@@ -346,7 +351,22 @@ function AudioPageContent() {
                                     <Badge size="sm" variant="outline">Chunk {chunk.chunk_number}</Badge>
                                     <span className="text-xs text-ink-muted">{chunk.duration_seconds}s</span>
                                   </div>
-                                  <p className="text-xs text-ink-muted">{chunk.filename}</p>
+                                  <div className="flex items-center space-x-2 text-xs text-ink-muted">
+                                    <span className="font-medium">{employeeEmail}</span>
+                                    <span>•</span>
+                                    <span>
+                                      {new Date(chunk.chunk_start_time).toLocaleString('en-GB', {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        second: '2-digit',
+                                        hour12: false,
+                                        timeZone: 'America/New_York'
+                                      })}
+                                    </span>
+                                  </div>
                                 </div>
                                 {chunk.file_url && (
                                   <div className="flex items-center space-x-2">
@@ -405,7 +425,8 @@ function AudioPageContent() {
                                 )}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}

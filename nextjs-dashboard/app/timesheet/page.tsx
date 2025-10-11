@@ -54,8 +54,8 @@ export default function TimesheetPage() {
   const [startDate, setStartDate] = useState(getCurrentDate());
   const [endDate, setEndDate] = useState(getCurrentDate());
 
-  // Get unique departments sorted A-Z
-  const departments = Array.from(new Set(timesheetData.map(entry => entry.employeeDepartment).filter(Boolean))).sort();
+  // Get unique departments sorted A-Z (exclude N/A)
+  const departments = Array.from(new Set(timesheetData.map(entry => entry.employeeDepartment).filter(dept => dept && dept !== 'N/A'))).sort();
 
   useEffect(() => {
     // Don't load if custom range is selected but dates aren't set yet
@@ -115,7 +115,6 @@ export default function TimesheetPage() {
       'Punch Out',
       'Work Hours',
       'Break Hours',
-      'Net Hours',
       'Status'
     ];
 
@@ -128,7 +127,6 @@ export default function TimesheetPage() {
         entry.punchOut,
         entry.workHours.toFixed(2),
         entry.breakHours.toFixed(2),
-        entry.netHours.toFixed(2),
         entry.status
       ].join(','))
     ];
@@ -162,6 +160,17 @@ export default function TimesheetPage() {
     }
   };
 
+  const formatBreakTime = (hours: number) => {
+    if (hours < 1) {
+      // Less than 1 hour - show in minutes
+      const minutes = Math.round(hours * 60);
+      return `${minutes}m`;
+    } else {
+      // 1 hour or more - show in hours
+      return `${hours.toFixed(2)}h`;
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -179,7 +188,7 @@ export default function TimesheetPage() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card>
             <CardContent className="py-4">
               <div className="text-sm text-ink-muted">Total Work Hours</div>
@@ -189,13 +198,7 @@ export default function TimesheetPage() {
           <Card>
             <CardContent className="py-4">
               <div className="text-sm text-ink-muted">Total Break Hours</div>
-              <div className="text-2xl font-semibold text-ink-hi">{totalBreakHours.toFixed(2)}h</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="text-sm text-ink-muted">Net Payable Hours</div>
-              <div className="text-2xl font-semibold text-success">{totalNetHours.toFixed(2)}h</div>
+              <div className="text-2xl font-semibold text-ink-hi">{formatBreakTime(totalBreakHours)}</div>
             </CardContent>
           </Card>
         </div>
@@ -316,7 +319,6 @@ export default function TimesheetPage() {
                 <TableHead>Punch Out</TableHead>
                 <TableHead>Work Hours</TableHead>
                 <TableHead>Break Hours</TableHead>
-                <TableHead>Net Hours</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -330,13 +332,12 @@ export default function TimesheetPage() {
                     <TableCell><div className="h-4 bg-gray-300 rounded w-20 animate-pulse"></div></TableCell>
                     <TableCell><div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
                     <TableCell><div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
-                    <TableCell><div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
                     <TableCell><div className="h-6 bg-gray-300 rounded w-20 animate-pulse"></div></TableCell>
                   </TableRow>
                 ))
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <div className="text-danger text-sm">{error}</div>
                     <Button variant="outline" size="sm" onClick={loadTimesheetData} className="mt-2">
                       Try Again
@@ -345,7 +346,7 @@ export default function TimesheetPage() {
                 </TableRow>
               ) : filteredData.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <div className="text-ink-muted">
                       {searchTerm ? 'No employees found matching your search.' : 'No timesheet data available for this period.'}
                     </div>
@@ -370,10 +371,7 @@ export default function TimesheetPage() {
                       <span className="font-mono text-ink-mid">{entry.workHours.toFixed(2)}h</span>
                     </TableCell>
                     <TableCell>
-                      <span className="font-mono text-ink-mid">{entry.breakHours.toFixed(2)}h</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono font-medium text-success">{entry.netHours.toFixed(2)}h</span>
+                      <span className="font-mono text-ink-mid">{formatBreakTime(entry.breakHours)}</span>
                     </TableCell>
                     <TableCell>
                       {getStatusBadge(entry.status)}
