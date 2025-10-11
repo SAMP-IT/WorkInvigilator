@@ -51,9 +51,26 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
+  // Set default dates to current date
+  const getCurrentDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
+  const [startDate, setStartDate] = useState<string>(getCurrentDate());
+  const [endDate, setEndDate] = useState<string>(getCurrentDate());
+
   const selectedEmployeeName = employees.find(emp => emp.id === selectedEmployee)?.name || '';
+
+  // Get filtered employees based on department
+  const filteredEmployees = selectedDepartment === 'all'
+    ? employees
+    : employees.filter(emp => emp.department === selectedDepartment);
+
+  // Get unique departments sorted A-Z
+  const departments = Array.from(new Set(employees.map(emp => emp.department).filter(Boolean))).sort();
 
   const exportToPDF = () => {
     if (!reportData) return;
@@ -195,7 +212,7 @@ export default function ReportsPage() {
     if (selectedEmployee && profile?.organization_id) {
       loadReportData();
     }
-  }, [selectedEmployee, activeTab, profile]);
+  }, [selectedEmployee, activeTab, startDate, endDate, profile]);
 
   const loadEmployees = async () => {
     try {
@@ -209,11 +226,15 @@ export default function ReportsPage() {
       }
       const data = await response.json();
       const employeeList = data.employees || [];
-      setEmployees(employeeList);
+      // Sort employees A-Z
+      const sortedEmployees = employeeList.sort((a: Employee, b: Employee) =>
+        (a.name || '').localeCompare(b.name || '')
+      );
+      setEmployees(sortedEmployees);
 
       // Set first employee as selected
-      if (employeeList.length > 0) {
-        setSelectedEmployee(employeeList[0].id);
+      if (sortedEmployees.length > 0) {
+        setSelectedEmployee(sortedEmployees[0].id);
       }
     } catch (err) {
       setError('Failed to load employees.');
@@ -231,7 +252,11 @@ export default function ReportsPage() {
         return;
       }
 
-      const response = await fetch(`/api/reports?employeeId=${selectedEmployee}&period=${activeTab}&organizationId=${profile.organization_id}`);
+      let url = `/api/reports?employeeId=${selectedEmployee}&period=${activeTab}&organizationId=${profile.organization_id}`;
+      if (startDate) url += `&startDate=${startDate}`;
+      if (endDate) url += `&endDate=${endDate}`;
+
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error('Failed to fetch report data');
       }
@@ -294,27 +319,84 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Employee Selection */}
+        {/* Filters */}
         <Card>
           <CardContent className="py-4">
-            <div className="flex items-center space-x-4">
-              <label className="text-sm font-medium text-ink-hi">
-                Select Employee:
-              </label>
-              <select
-                value={selectedEmployee}
-                onChange={(e) => setSelectedEmployee(e.target.value)}
-                className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary min-w-64"
-              >
-                {employees.map(employee => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.name} - {employee.department}
-                  </option>
-                ))}
-              </select>
-              <Badge variant="info">
-                {selectedEmployeeName}
-              </Badge>
+            <div className="space-y-4">
+              <div className="flex items-center space-x-4 flex-wrap gap-4">
+                <label className="text-sm font-medium text-ink-hi">
+                  Filters:
+                </label>
+                <select
+                  value={selectedDepartment}
+                  onChange={(e) => {
+                    setSelectedDepartment(e.target.value);
+                    // Reset employee selection when department changes
+                    const newFilteredEmployees = e.target.value === 'all'
+                      ? employees
+                      : employees.filter(emp => emp.department === e.target.value);
+                    if (newFilteredEmployees.length > 0) {
+                      setSelectedEmployee(newFilteredEmployees[0].id);
+                    }
+                  }}
+                  className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="all">All Departments</option>
+                  {departments.map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+                <select
+                  value={selectedEmployee}
+                  onChange={(e) => setSelectedEmployee(e.target.value)}
+                  className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary min-w-64"
+                >
+                  {filteredEmployees.map(employee => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.name} - {employee.department}
+                    </option>
+                  ))}
+                </select>
+                <Badge variant="info">
+                  {selectedEmployeeName}
+                </Badge>
+              </div>
+
+              <div className="flex items-center space-x-4">
+                <label className="text-sm font-medium text-ink-hi">
+                  Date Range:
+                </label>
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-ink-mid">Start Date</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-ink-mid">End Date</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                {(startDate || endDate) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setStartDate(getCurrentDate());
+                      setEndDate(getCurrentDate());
+                    }}
+                  >
+                    Reset Dates
+                  </Button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

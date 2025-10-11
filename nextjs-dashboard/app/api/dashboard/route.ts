@@ -120,13 +120,13 @@ export async function GET(request: NextRequest) {
     // Get profiles for active users
     const { data: activeProfiles } = await supabaseAdmin
       .from('profiles')
-      .select('id, name, email')
+      .select('id, name, email, department')
       .in('id', activeUserIds)
 
     const activeProfileMap = (activeProfiles || []).reduce((acc, p) => {
       acc[p.id] = p
       return acc
-    }, {} as Record<string, { id: string; name: string; email: string }>)
+    }, {} as Record<string, { id: string; name: string; email: string; department: string }>)
 
     // Get all employees from this organization
     const { data: allEmployees } = await supabaseAdmin
@@ -270,6 +270,7 @@ export async function GET(request: NextRequest) {
         id: session.id,
         employeeId: session.user_id,
         employeeName,
+        department: profile?.department || 'N/A',
         startTime: startTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
         duration: durationFormatted,
         status: 'active' as const

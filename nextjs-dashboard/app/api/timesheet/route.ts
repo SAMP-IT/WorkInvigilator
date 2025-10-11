@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     // Get all employees in the organization
     const { data: employees } = await supabaseAdmin
       .from('profiles')
-      .select('id, name, email')
+      .select('id, name, email, department')
       .eq('organization_id', organizationId)
       .neq('role', 'admin')
 
@@ -297,9 +297,12 @@ export async function GET(request: NextRequest) {
         })
       }
 
+      const employee = employees.find(emp => emp.id === entry.employeeId)
+
       return {
         employeeId: entry.employeeId,
         employeeName: entry.employeeName,
+        employeeDepartment: employee?.department || 'N/A',
         date: new Date(entry.date).toLocaleDateString('en-GB', {
           day: '2-digit',
           month: '2-digit',

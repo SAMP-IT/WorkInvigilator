@@ -51,6 +51,14 @@ export default function SessionsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [sessionFilter, setSessionFilter] = useState('all');
 
+  // Set default date to current date
+  const getCurrentDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
+  const [startDate, setStartDate] = useState<string>(getCurrentDate());
+  const [endDate, setEndDate] = useState<string>(getCurrentDate());
+
   const getSessionType = (employeeId: string) => {
     const employee = employees.find(emp => emp.id === employeeId);
     if (!employee || !employee.shiftStartTime || !employee.shiftEndTime) return 'all';
@@ -84,7 +92,7 @@ export default function SessionsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [startDate, endDate]);
 
   const loadData = async () => {
     try {
@@ -97,8 +105,12 @@ export default function SessionsPage() {
         return;
       }
 
-      // Load sessions filtered by organization
-      const sessionsResponse = await fetch(`/api/sessions?organizationId=${profile.organization_id}`);
+      // Load sessions filtered by organization and date range
+      let sessionsUrl = `/api/sessions?organizationId=${profile.organization_id}`;
+      if (startDate) sessionsUrl += `&startDate=${startDate}`;
+      if (endDate) sessionsUrl += `&endDate=${endDate}`;
+
+      const sessionsResponse = await fetch(sessionsUrl);
       if (sessionsResponse.ok) {
         const sessionsData = await sessionsResponse.json();
         setSessions(sessionsData.sessions || []);
@@ -192,38 +204,80 @@ export default function SessionsPage() {
         {/* Filters */}
         <Card>
           <CardContent className="py-4">
-            <div className="flex items-center space-x-4">
-              <div className="flex-1">
-                <Input
-                  placeholder="Search by employee name or application..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full"
-                />
+            <div className="space-y-4">
+              <div className="flex items-center space-x-4">
+                <div className="flex-1">
+                  <Input
+                    placeholder="Search by employee name or application..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <select
+                  value={sessionFilter}
+                  onChange={(e) => setSessionFilter(e.target.value)}
+                  className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="all">All Sessions</option>
+                  <option value="morning">Morning Session</option>
+                  <option value="afternoon">Afternoon Session</option>
+                  <option value="evening">Evening Session</option>
+                </select>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="completed">Completed</option>
+                  <option value="paused">Paused</option>
+                </select>
+                <Button variant="outline" onClick={handleExportCSV}>
+                  Export CSV
+                </Button>
               </div>
-              <select
-                value={sessionFilter}
-                onChange={(e) => setSessionFilter(e.target.value)}
-                className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="all">All Sessions</option>
-                <option value="morning">Morning Session</option>
-                <option value="afternoon">Afternoon Session</option>
-                <option value="evening">Evening Session</option>
-              </select>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="completed">Completed</option>
-                <option value="paused">Paused</option>
-              </select>
-              <Button variant="outline" onClick={handleExportCSV}>
-                Export CSV
-              </Button>
+              <div className="flex items-center space-x-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-ink-hi mb-2">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                    disabled={loading}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-ink-hi mb-2">
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                    disabled={loading}
+                  />
+                </div>
+                {(startDate || endDate) && (
+                  <div className="pt-6">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setStartDate(getCurrentDate());
+                        setEndDate(getCurrentDate());
+                      }}
+                    >
+                      Reset Dates
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

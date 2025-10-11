@@ -32,16 +32,35 @@ export default function BreaksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
 
-  const displayedBreaks = selectedEmployee === 'all'
-    ? breakSessions
-    : breakSessions.filter(b => b.employeeId === selectedEmployee);
+  // Set default dates to current date
+  const getCurrentDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
+  const [startDate, setStartDate] = useState<string>(getCurrentDate());
+  const [endDate, setEndDate] = useState<string>(getCurrentDate());
+
+  // Filter by department first, then by employee
+  const displayedBreaks = breakSessions.filter(b => {
+    const employee = employees.find(emp => emp.id === b.employeeId);
+    const matchesDepartment = selectedDepartment === 'all' || employee?.department === selectedDepartment;
+    const matchesEmployee = selectedEmployee === 'all' || b.employeeId === selectedEmployee;
+    return matchesDepartment && matchesEmployee;
+  });
+
+  // Get filtered employees based on department
+  const filteredEmployees = selectedDepartment === 'all'
+    ? employees
+    : employees.filter(emp => emp.department === selectedDepartment);
+
+  // Get unique departments sorted A-Z
+  const departments = Array.from(new Set(employees.map(emp => emp.department).filter(Boolean))).sort();
 
   useEffect(() => {
     loadData();
-  }, [selectedEmployee, startDate, endDate]);
+  }, [selectedEmployee, selectedDepartment, startDate, endDate]);
 
   const loadData = async () => {
     try {
@@ -195,7 +214,25 @@ export default function BreaksPage() {
             <CardTitle>Filters</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-ink-hi mb-2">
+                  Department
+                </label>
+                <select
+                  value={selectedDepartment}
+                  onChange={(e) => {
+                    setSelectedDepartment(e.target.value);
+                    setSelectedEmployee('all'); // Reset employee filter when department changes
+                  }}
+                  className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="all">All Departments</option>
+                  {departments.map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-ink-hi mb-2">
                   Employee
@@ -206,7 +243,7 @@ export default function BreaksPage() {
                   className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="all">All Employees</option>
-                  {employees.map(employee => (
+                  {filteredEmployees.sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(employee => (
                     <option key={employee.id} value={employee.id}>
                       {employee.name} - {employee.department}
                     </option>
@@ -251,14 +288,15 @@ export default function BreaksPage() {
                   </p>
                 )}
               </div>
-              {(selectedEmployee !== 'all' || startDate || endDate) && (
+              {(selectedEmployee !== 'all' || selectedDepartment !== 'all' || startDate || endDate) && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
                     setSelectedEmployee('all');
-                    setStartDate('');
-                    setEndDate('');
+                    setSelectedDepartment('all');
+                    setStartDate(getCurrentDate());
+                    setEndDate(getCurrentDate());
                   }}
                 >
                   Clear All Filters

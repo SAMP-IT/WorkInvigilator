@@ -50,14 +50,38 @@ function HomePageContent() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [kpis, setKpis] = useState({ activeSessions: 0, totalEmployees: 0, avgProductivity: 0, totalScreenshots: 0, avgSessionDuration: 0, avgFocusHours: 0 });
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [allDepartments, setAllDepartments] = useState<string[]>([]);
 
   useEffect(() => {
     if (profile?.organization_id) {
       loadData();
+      loadDepartments();
     } else if (!authLoading) {
       setLoading(false)
     }
   }, [profile?.organization_id, authLoading, searchParams]);
+
+  async function loadDepartments() {
+    if (!profile?.organization_id) return;
+
+    try {
+      const response = await fetch(`/api/employees?organizationId=${profile.organization_id}`);
+      if (response.ok) {
+        const data = await response.json();
+        const departments = Array.from(
+          new Set(
+            (data.employees || [])
+              .map((emp: any) => emp.department)
+              .filter(Boolean)
+          )
+        ).sort() as string[];
+        setAllDepartments(departments);
+      }
+    } catch (error) {
+      console.error('Failed to load departments:', error);
+    }
+  }
 
   async function loadData() {
     setLoading(true);
@@ -238,7 +262,19 @@ function HomePageContent() {
           {/* Live Sessions */}
           <Card hover>
             <CardHeader>
-              <CardTitle>Live Sessions ({activeSessions.length})</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Live Sessions ({activeSessions.filter(s => departmentFilter === 'all' || s.department === departmentFilter).length})</CardTitle>
+                <select
+                  value={departmentFilter}
+                  onChange={(e) => setDepartmentFilter(e.target.value)}
+                  className="bg-surface border border-line rounded px-2 py-1 text-xs text-ink-hi focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="all">All Departments</option>
+                  {allDepartments.map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -258,8 +294,11 @@ function HomePageContent() {
                       <div className="h-6 bg-gray-300 rounded w-12"></div>
                     </div>
                   ))
-                ) : activeSessions.length > 0 ? (
-                  activeSessions.map((session) => (
+                ) : activeSessions.filter(s => departmentFilter === 'all' || s.department === departmentFilter).length > 0 ? (
+                  activeSessions
+                    .filter(s => departmentFilter === 'all' || s.department === departmentFilter)
+                    .sort((a, b) => (a.department || '').localeCompare(b.department || ''))
+                    .map((session) => (
                     <div
                       key={session.id}
                       className="flex items-center justify-between p-3 bg-raised rounded-lg"
@@ -271,7 +310,7 @@ function HomePageContent() {
                             {session.employeeName}
                           </p>
                           <p className="text-xs text-ink-muted">
-                            Session: {session.duration}
+                            {session.department} • Session: {session.duration}
                           </p>
                         </div>
                       </div>

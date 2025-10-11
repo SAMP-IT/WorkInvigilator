@@ -7,6 +7,8 @@ export async function GET(request: NextRequest) {
     const employeeId = searchParams.get('employeeId')
     const organizationId = searchParams.get('organizationId')
     const period = searchParams.get('period') as 'daily' | 'weekly' | 'monthly' || 'daily'
+    const customStartDate = searchParams.get('startDate')
+    const customEndDate = searchParams.get('endDate')
 
     if (!employeeId) {
       return NextResponse.json(
@@ -36,26 +38,36 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Calculate date range based on period
+    // Calculate date range - use custom dates if provided, otherwise use period
     let startDate: Date
-    const endDate = new Date()
+    let endDate: Date
 
-    switch (period) {
-      case 'daily':
-        startDate = new Date()
-        startDate.setHours(0, 0, 0, 0)
-        break
-      case 'weekly':
-        startDate = new Date()
-        startDate.setDate(startDate.getDate() - 7)
-        break
-      case 'monthly':
-        startDate = new Date()
-        startDate.setDate(startDate.getDate() - 30)
-        break
-      default:
-        startDate = new Date()
-        startDate.setHours(0, 0, 0, 0)
+    if (customStartDate && customEndDate) {
+      // Use custom date range
+      startDate = new Date(customStartDate)
+      startDate.setHours(0, 0, 0, 0)
+      endDate = new Date(customEndDate)
+      endDate.setHours(23, 59, 59, 999)
+    } else {
+      // Use period-based date range
+      endDate = new Date()
+      switch (period) {
+        case 'daily':
+          startDate = new Date()
+          startDate.setHours(0, 0, 0, 0)
+          break
+        case 'weekly':
+          startDate = new Date()
+          startDate.setDate(startDate.getDate() - 7)
+          break
+        case 'monthly':
+          startDate = new Date()
+          startDate.setDate(startDate.getDate() - 30)
+          break
+        default:
+          startDate = new Date()
+          startDate.setHours(0, 0, 0, 0)
+      }
     }
 
     // Get sessions for the period filtered by organization
@@ -86,20 +98,26 @@ export async function GET(request: NextRequest) {
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString())
 
-    // Calculate totals - fallback to recording_chunks if no sessions exist
+    // Calculate totals - ALWAYS check recording_chunks since sessions may not exist
     let totalWorkSeconds = sessions?.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0) || 0
-    
-    // If no sessions, calculate from recording_chunks
-    if (totalWorkSeconds === 0) {
-      const { data: chunks } = await supabaseAdmin
-        .from('recording_chunks')
-        .select('duration_seconds')
-        .eq('user_id', employeeId)
-        .eq('organization_id', organizationId)
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString())
-      
-      totalWorkSeconds = chunks?.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) || 0
+
+    // Get recording chunks data (this is what the desktop app actually creates)
+    const { data: chunks } = await supabaseAdmin
+      .from('recording_chunks')
+      .select('duration_seconds, session_start_time, chunk_start_time')
+      .eq('user_id', employeeId)
+      .eq('organization_id', organizationId)
+      .gte('created_at', startDate.toISOString())
+      .lte('created_at', endDate.toISOString())
+
+    const chunksWorkSeconds = chunks?.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) || 0
+
+    // Use whichever is greater (chunks or sessions)
+    totalWorkSeconds = Math.max(totalWorkSeconds, chunksWorkSeconds)
+
+    // If still 0, estimate from screenshots (2 minutes per screenshot as fallback)
+    if (totalWorkSeconds === 0 && screenshotsCount && screenshotsCount > 0) {
+      totalWorkSeconds = screenshotsCount * 120 // 2 minutes per screenshot
     }
     
     const totalFocusSeconds = metrics?.reduce((sum, m) => sum + (m.focus_time_seconds || 0), 0) || Math.floor(totalWorkSeconds * 0.85)
@@ -183,7 +201,7 @@ export async function GET(request: NextRequest) {
       focusTime: formatTime(totalFocusSeconds),
       breakTime: formatTime(totalBreakSeconds),
       productivity: Number(avgProductivity.toFixed(1)),
-      sessionsCount: sessions?.length || (totalWorkSeconds > 0 ? 1 : 0),
+      sessionsCount: sessions?.length || chunks?.length || (totalWorkSeconds > 0 ? 1 : 0),
       screenshotsCount: screenshotsCount || 0,
       breakSessionsCount: breakSessions?.length || 0,
       applications,
