@@ -29,7 +29,6 @@ const BACKBLAZE_CONFIG = {
 
 // Initialize Supabase in main process
 supabaseClient = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anon_key);
-console.log('✅ Supabase initialized in main process');
 
 // Initialize Backblaze S3 client
 let s3Client = null;
@@ -42,9 +41,7 @@ if (BACKBLAZE_CONFIG.enabled && BACKBLAZE_CONFIG.keyId && BACKBLAZE_CONFIG.appli
       secretAccessKey: BACKBLAZE_CONFIG.applicationKey
     }
   });
-  console.log('✅ Backblaze S3 client initialized');
 } else {
-  console.log('ℹ️ Backblaze disabled or not configured');
 }
 
 function createWindow() {
@@ -184,14 +181,12 @@ function createTray() {
   
   // Create tray only if icon exists
   if (!iconPath) {
-    console.warn('⚠️ Tray icon not found, skipping tray creation');
     return;
   }
   
   try {
     tray = new Tray(iconPath);
   } catch (error) {
-    console.warn('⚠️ Failed to create tray:', error.message);
     return;
   }
 
@@ -275,7 +270,6 @@ ipcMain.handle('capture-screenshot', async () => {
 
     return { success: false, error: 'No screens found' };
   } catch (error) {
-    console.error('Screenshot capture error:', error);
     return { success: false, error: error.message };
   }
 });
@@ -355,8 +349,11 @@ ipcMain.handle('supabase-query', async (event, table, operation, params) => {
         return await query;
         
       case 'insert':
-        const result = await query.insert(params.data).select();
-        return result;
+        query = query.insert(params.data).select();
+        if (params.single) {
+          return await query.single();
+        }
+        return await query;
         
       case 'update':
         query = query.update(params.data);
@@ -465,5 +462,9 @@ ipcMain.handle('backblaze-storage', async (event, operation, params) => {
   }
 });
 
-console.log('✅ Work Invigilator Desktop initialized');
+// Handle app cleanup - called from renderer before app closes
+ipcMain.handle('app-cleanup-complete', async () => {
+  return { success: true };
+});
+
 

@@ -43,6 +43,11 @@ const navigationItems = [
     icon: "/productivity.png",
   },
   {
+    name: "Mute Events",
+    href: "/mute-events",
+    icon: "/audio.png",
+  },
+  {
     name: "Reports",
     href: "/reports",
     icon: "/report.png",

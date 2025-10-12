@@ -155,7 +155,6 @@ function EmployeesPageContent() {
       "Email",
       "Department",
       "Role",
-      "Productivity %",
       "Avg Break (h)",
       "Avg Session (min)",
       "Last Active",
@@ -169,7 +168,6 @@ function EmployeesPageContent() {
           `"${emp.email}"`,
           `"${emp.department}"`,
           `"${emp.role}"`,
-          emp.productivity7d.toFixed(1),
           emp.avgBreakHDay.toFixed(1),
           emp.avgSessionMin,
           `"${emp.lastActive}"`,
@@ -444,7 +442,6 @@ function EmployeesPageContent() {
                 <TableHead>Employee</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead sortable>Productivity</TableHead>
                 <TableHead sortable>Avg Break</TableHead>
                 <TableHead sortable>Avg Session</TableHead>
                 <TableHead sortable>Last Active</TableHead>
@@ -553,22 +550,6 @@ function EmployeesPageContent() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center space-x-2">
-                        <span className="cell-num font-mono">
-                          {formatProductivity(employee.productivity7d)}
-                        </span>
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            employee.productivity7d >= 90
-                              ? "bg-success"
-                              : employee.productivity7d >= 75
-                              ? "bg-warn"
-                              : "bg-danger"
-                          }`}
-                        />
-                      </div>
-                    </TableCell>
-                    <TableCell>
                       <span className="cell-num font-mono text-ink-mid">
                         {formatHours(employee.avgBreakHDay)}
                       </span>
@@ -649,17 +630,15 @@ function EmployeesPageContent() {
                     {/* Quick Stats */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-raised p-3 rounded-lg">
-                        <div className="text-xs text-ink-muted">
-                          Productivity
-                        </div>
-                        <div className="text-lg font-semibold text-ink-hi font-mono">
-                          {formatProductivity(employee.productivity7d)}
-                        </div>
-                      </div>
-                      <div className="bg-raised p-3 rounded-lg">
                         <div className="text-xs text-ink-muted">Break Time</div>
                         <div className="text-lg font-semibold text-ink-hi font-mono">
                           {formatHours(employee.avgBreakHDay)}
+                        </div>
+                      </div>
+                      <div className="bg-raised p-3 rounded-lg">
+                        <div className="text-xs text-ink-muted">Avg Session</div>
+                        <div className="text-lg font-semibold text-ink-hi font-mono">
+                          {formatMinutes(employee.avgSessionMin)}
                         </div>
                       </div>
                     </div>

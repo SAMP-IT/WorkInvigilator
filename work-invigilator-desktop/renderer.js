@@ -27,6 +27,19 @@ class WorkInvigilatorApp {
     this.CHUNK_DURATION = 5 * 60 * 1000; // 5 minutes
     this.chunkInterval = null;
     this.isStoppingForChunk = false;
+
+    // Microphone mute detection
+    this.audioContext = null;
+    this.analyser = null;
+    this.micMonitorInterval = null;
+    this.silenceStartTime = null;
+    this.isMuted = false;
+    this.currentMuteEventId = null;
+    this.SILENCE_THRESHOLD = 0.0001; // Near-zero threshold for complete audio failure (0.0 - 1.0)
+    this.SILENCE_DURATION = 15000; // 15 seconds of complete silence triggers mute event (reduced from 60s)
+    this.consecutiveZeroReadings = 0; // Count consecutive zero readings
+    this.ZERO_READINGS_THRESHOLD = 5; // 5 consecutive zero readings to confirm mute (reduced from 10)
+    this.audioDeviceCheckInterval = null;
     
     // Screenshot
     this.screenshotInterval = null;
@@ -37,7 +50,7 @@ class WorkInvigilatorApp {
     this.init();
   }
   
-  async init() {
+  async   init() {
     // Initialize UI
     this.initializeElements();
     this.bindEvents();
@@ -50,6 +63,14 @@ class WorkInvigilatorApp {
     
     // Check microphone permission
     this.checkMicrophonePermission();
+    
+    // Handle app closing - ensure sessions are properly ended
+    window.addEventListener('beforeunload', async (e) => {
+      if (this.isMonitoring) {
+        e.preventDefault();
+        await this.stopMonitoring();
+      }
+    });
   }
   
   initializeElements() {
@@ -182,7 +203,10 @@ class WorkInvigilatorApp {
           insert: (data) => ({
             select: () => ({
               single: async () => {
-                return await window.electronAPI.supabaseQuery(table, 'insert', { data });
+                return await window.electronAPI.supabaseQuery(table, 'insert', { 
+                  data,
+                  single: true 
+                });
               },
               then: async (resolve) => {
                 const result = await window.electronAPI.supabaseQuery(table, 'insert', { data });
@@ -223,7 +247,6 @@ class WorkInvigilatorApp {
       };
 
     } catch (error) {
-      console.error('❌ Failed to initialize Supabase:', error);
       this.showMessage('Failed to initialize database connection', 'error');
     }
   }
@@ -259,7 +282,6 @@ class WorkInvigilatorApp {
         }
       }
     } catch (error) {
-      console.error('❌ Failed to restore session:', error);
     }
     
     // Show login form
@@ -294,7 +316,6 @@ class WorkInvigilatorApp {
         await this.logout();
       }
     } catch (error) {
-      console.error('❌ Token refresh failed:', error);
       // If refresh fails, logout the user
       await this.logout();
     }
@@ -355,14 +376,14 @@ class WorkInvigilatorApp {
       this.startTokenRefresh();
       
     } catch (error) {
-      console.error('❌ Login failed:', error);
       this.showMessage(error.message || 'Login failed', 'error');
     }
   }
   
   async logout() {
     try {
-      // Stop monitoring if active
+      
+      // Stop monitoring if active - this will properly end the session in DB
       if (this.isMonitoring) {
         await this.stopMonitoring();
       }
@@ -382,16 +403,22 @@ class WorkInvigilatorApp {
       await window.electronAPI.storeDelete('organizationId');
       await window.electronAPI.storeDelete('accessToken');
       await window.electronAPI.storeDelete('refreshToken');
+      await window.electronAPI.storeDelete('isMonitoring');
+      await window.electronAPI.storeDelete('sessionStartTime');
+      await window.electronAPI.storeDelete('currentSessionId');
       
       // Clear state
       this.currentUser = null;
       this.userRole = null;
       this.organizationId = null;
+      this.isMonitoring = false;
+      this.sessionStartTime = null;
+      this.currentSessionId = null;
       
       this.showUnauthenticatedView();
       
+      
     } catch (error) {
-      console.error('❌ Logout failed:', error);
     }
   }
   
@@ -441,8 +468,7 @@ class WorkInvigilatorApp {
     
     try {
       this.sessionStartTime = new Date();
-      
-      // Create session record in database
+
       const { data: sessionData, error: sessionError } = await this.supabase
         .from('recording_sessions')
         .insert([{
@@ -458,11 +484,18 @@ class WorkInvigilatorApp {
         .select()
         .single();
       
-      if (sessionError) throw sessionError;
+      if (sessionError) {
+        throw sessionError;
+      }
       
-      // Handle array response from Supabase
+      // Extract session ID (handle both array and object responses)
       const session = Array.isArray(sessionData) ? sessionData[0] : sessionData;
       this.currentSessionId = session?.id;
+      
+      if (!this.currentSessionId) {
+        throw new Error('Failed to get session ID from database');
+      }
+      
       
       // Start recording
       await this.startRecording();
@@ -478,8 +511,8 @@ class WorkInvigilatorApp {
       // Save state
       await this.saveMonitoringState();
       
+      
     } catch (error) {
-      console.error('❌ Failed to start monitoring:', error);
       this.showMessage('Failed to start session: ' + error.message, 'error');
     }
   }
@@ -491,16 +524,21 @@ class WorkInvigilatorApp {
       const sessionEndTime = new Date();
       const sessionDuration = Math.floor((sessionEndTime - this.sessionStartTime) / 1000);
       
-      // Stop recording
+      // Stop recording first
       await this.stopRecording();
       
       // Stop timers
       this.stopSessionTimer();
       this.stopScreenshotCapture();
       
-      // Update session record
+      // End any active break
+      if (this.isOnBreak) {
+        await this.endBreak();
+      }
+      
+      // Update session record in database
       if (this.currentSessionId) {
-        await this.supabase
+        const { data: updateData, error: updateError } = await this.supabase
           .from('recording_sessions')
           .update({
             session_end_time: sessionEndTime.toISOString(),
@@ -510,21 +548,31 @@ class WorkInvigilatorApp {
             chunk_files: this.sessionChunks
           })
           .eq('id', this.currentSessionId);
+        
+        if (updateError) {
+          this.showMessage('Warning: Session end time was not saved to database', 'warning');
+        } else {
+        }
+      } else {
       }
       
       // Clear state
       this.isMonitoring = false;
       this.sessionStartTime = null;
       this.currentSessionId = null;
+      this.sessionChunks = [];
+      this.totalWorkTime = 0;
+      this.totalBreakTime = 0;
       
       // Update UI
       this.updateMonitoringUI(false);
       
-      // Save state
+      // Save state to storage
       await this.saveMonitoringState();
       
+      
     } catch (error) {
-      console.error('❌ Failed to stop monitoring:', error);
+      this.showMessage('Error stopping session: ' + error.message, 'error');
     }
   }
   
@@ -591,8 +639,10 @@ class WorkInvigilatorApp {
         }
       }, this.CHUNK_DURATION);
 
+      // Start microphone mute detection
+      await this.startMicrophoneMonitoring(stream);
+
     } catch (error) {
-      console.error('❌ Failed to start recording:', error);
       throw error;
     }
   }
@@ -617,6 +667,9 @@ class WorkInvigilatorApp {
             track.stop();
           });
 
+          // Stop microphone monitoring
+          this.stopMicrophoneMonitoring();
+
           resolve();
         };
 
@@ -624,29 +677,298 @@ class WorkInvigilatorApp {
       });
     }
   }
+
+  async startMicrophoneMonitoring(stream) {
+    try {
+      // Create audio context and analyser
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = 2048;
+      this.analyser.smoothingTimeConstant = 0.8;
+
+      // Connect microphone stream to analyser
+      const source = this.audioContext.createMediaStreamSource(stream);
+      source.connect(this.analyser);
+
+      // Perform initial check after a short delay to allow audio context to initialize
+      setTimeout(() => {
+        this.checkMicrophoneLevel();
+      }, 1000);
+
+      // Monitor audio levels every 500ms for faster detection
+      this.micMonitorInterval = setInterval(() => {
+        this.checkMicrophoneLevel();
+      }, 500);
+
+      // Monitor for audio device changes (disconnection)
+      this.startAudioDeviceMonitoring();
+
+    } catch (error) {
+    }
+  }
+
+  startAudioDeviceMonitoring() {
+    // Listen for device changes
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+      navigator.mediaDevices.addEventListener('devicechange', () => {
+        this.checkAudioDeviceStatus();
+      });
+    }
+
+    // Periodically check if audio track is still alive
+    this.audioDeviceCheckInterval = setInterval(() => {
+      this.checkAudioDeviceStatus();
+    }, 5000); // Check every 5 seconds
+  }
+
+  async checkAudioDeviceStatus() {
+    try {
+      const stream = this.mediaRecorder?.stream;
+      const audioTrack = stream?.getAudioTracks()[0];
+
+      if (!audioTrack) {
+        // No audio track - device disconnected
+        if (!this.isMuted) {
+          this.isMuted = true;
+          this.handleMuteDetected('no_audio_device', 0);
+        }
+        return;
+      }
+
+      // Check if track ended (device unplugged)
+      if (audioTrack.readyState === 'ended') {
+        if (!this.isMuted) {
+          this.isMuted = true;
+          this.handleMuteDetected('no_audio_device', 0);
+        }
+      }
+    } catch (error) {
+    }
+  }
+
+  async stopMicrophoneMonitoring() {
+    if (this.micMonitorInterval) {
+      clearInterval(this.micMonitorInterval);
+      this.micMonitorInterval = null;
+    }
+
+    if (this.audioDeviceCheckInterval) {
+      clearInterval(this.audioDeviceCheckInterval);
+      this.audioDeviceCheckInterval = null;
+    }
+
+    if (this.audioContext) {
+      this.audioContext.close();
+      this.audioContext = null;
+    }
+
+    this.analyser = null;
+    this.silenceStartTime = null;
+    this.isMuted = false;
+    this.consecutiveZeroReadings = 0;
+
+    // If there's an active mute event, end it
+    if (this.currentMuteEventId) {
+      await this.endMuteEvent();
+    } else if (this.currentSessionId) {
+      // Fallback: Check for any active mute events for this session and close them
+      await this.closeActiveMuteEventsForSession();
+    }
+  }
+
+  async closeActiveMuteEventsForSession() {
+    if (!this.supabase || !this.currentSessionId) return;
+
+    try {
+      // Find any active mute events for this session (mute_end_time is null)
+      // Note: We'll filter for null values on the client side since .is() is not supported
+      const { data: allMutes } = await this.supabase
+        .from('mute_events')
+        .select('id, mute_start_time, mute_end_time')
+        .eq('session_id', this.currentSessionId);
+
+      if (allMutes && allMutes.length > 0) {
+        // Filter for active mutes (mute_end_time is null)
+        const activeMutes = allMutes.filter(mute => mute.mute_end_time === null);
+        
+        if (activeMutes.length > 0) {
+          const muteEndTime = new Date().toISOString();
+
+          // Close all active mute events
+          for (const mute of activeMutes) {
+            const durationSeconds = Math.floor(
+              (new Date(muteEndTime) - new Date(mute.mute_start_time)) / 1000
+            );
+
+            await this.supabase
+              .from('mute_events')
+              .update({
+                mute_end_time: muteEndTime,
+                duration_seconds: durationSeconds
+              })
+              .eq('id', mute.id);
+          }
+          
+        }
+      }
+    } catch (error) {
+    }
+  }
+
+  async checkMicrophoneLevel() {
+    if (!this.analyser) return;
+
+    const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+    this.analyser.getByteFrequencyData(dataArray);
+
+    // Calculate average volume (0-255 range)
+    const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+    const normalizedLevel = average / 255; // Normalize to 0.0 - 1.0
+
+    // Check if microphone track is disabled or muted
+    const stream = this.mediaRecorder?.stream;
+    const audioTrack = stream?.getAudioTracks()[0];
+
+    if (!audioTrack) {
+      // No audio track available - microphone disconnected
+      if (!this.isMuted) {
+        this.isMuted = true;
+        this.handleMuteDetected('no_audio_device', 0);
+      }
+      return;
+    }
+
+    const isTrackEnabled = audioTrack.enabled;
+    const isMutedByTrack = audioTrack.muted; // Hardware/OS level mute
+
+    // Detect track disabled (software mute or headset button)
+    if (!isTrackEnabled) {
+      if (!this.isMuted) {
+        this.isMuted = true;
+        this.handleMuteDetected('track_disabled', normalizedLevel);
+      }
+      return;
+    }
+
+    // Detect hardware/OS mute
+    if (isMutedByTrack) {
+      if (!this.isMuted) {
+        this.isMuted = true;
+        this.handleMuteDetected('hardware_mute', normalizedLevel);
+      }
+      return;
+    }
+
+    // Detect complete audio failure (near-zero audio consistently)
+    if (normalizedLevel < this.SILENCE_THRESHOLD) {
+      this.consecutiveZeroReadings++;
+
+      // If we have enough consecutive zero readings, start tracking silence duration
+      if (this.consecutiveZeroReadings >= this.ZERO_READINGS_THRESHOLD) {
+        if (!this.silenceStartTime) {
+          this.silenceStartTime = Date.now();
+        }
+
+        const silenceDuration = Date.now() - this.silenceStartTime;
+
+        // If complete silence exceeds threshold and not already in mute state
+        if (silenceDuration >= this.SILENCE_DURATION && !this.isMuted) {
+          this.isMuted = true;
+          this.handleMuteDetected('complete_silence', normalizedLevel);
+        }
+      }
+    } else {
+      // Audio detected - reset counters
+      this.consecutiveZeroReadings = 0;
+
+      if (this.silenceStartTime) {
+        this.silenceStartTime = null;
+      }
+
+      // If was muted, mark as unmuted and end the event
+      if (this.isMuted) {
+        this.isMuted = false;
+        await this.endMuteEvent();
+
+        // Reset the mute event ID so next mute creates a NEW event
+        this.currentMuteEventId = null;
+      }
+    }
+  }
+
+  async handleMuteDetected(detectionType, audioLevel) {
+    try {
+      
+      // Create mute event in database
+      const { data: muteEvent, error } = await this.supabase
+        .from('mute_events')
+        .insert({
+          user_id: this.currentUser.id,
+          organization_id: this.organizationId,
+          session_id: this.currentSessionId,
+          mute_start_time: new Date().toISOString(),
+          detection_type: detectionType,
+          audio_level: audioLevel
+        })
+        .select()
+        .single();
+
+      if (error) {
+        return;
+      }
+
+      this.currentMuteEventId = muteEvent.id;
+
+      // Note: We don't auto-pause the session anymore, just log the mute event
+      // The recording continues, but the mute event is tracked in the database
+
+    } catch (error) {
+    }
+  }
+
+  async endMuteEvent() {
+    if (!this.currentMuteEventId) return;
+
+    try {
+      const muteEndTime = new Date().toISOString();
+
+      // Get the mute start time to calculate duration
+      const { data: muteEvent } = await this.supabase
+        .from('mute_events')
+        .select('mute_start_time')
+        .eq('id', this.currentMuteEventId)
+        .single();
+
+      if (muteEvent) {
+        const durationSeconds = Math.floor(
+          (new Date(muteEndTime) - new Date(muteEvent.mute_start_time)) / 1000
+        );
+
+        // Update mute event with end time
+        await this.supabase
+          .from('mute_events')
+          .update({
+            mute_end_time: muteEndTime,
+            duration_seconds: durationSeconds
+          })
+          .eq('id', this.currentMuteEventId);
+      }
+
+      this.currentMuteEventId = null;
+    } catch (error) {
+    }
+  }
   
   async saveCurrentChunk() {
-    console.log('💾 [AUDIO] saveCurrentChunk called');
-    console.log('💾 [AUDIO] Supabase client exists?', !!this.supabase);
-    console.log('💾 [AUDIO] Current user exists?', !!this.currentUser);
-    console.log('💾 [AUDIO] Audio chunks count:', this.audioChunks.length);
 
     if (!this.supabase || !this.currentUser || this.audioChunks.length === 0) {
-      console.warn('⚠️ [AUDIO] Cannot save chunk - missing prerequisites:', {
-        hasSupabase: !!this.supabase,
-        hasUser: !!this.currentUser,
-        chunksCount: this.audioChunks.length
-      });
       return;
     }
 
     try {
-      console.log('💾 [AUDIO] Creating blob from audio chunks...');
       const chunkBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
-      console.log('💾 [AUDIO] Blob created. Size:', chunkBlob.size, 'bytes', 'Type:', chunkBlob.type);
 
       const arrayBuffer = await chunkBlob.arrayBuffer();
-      console.log('💾 [AUDIO] ArrayBuffer created. Byte length:', arrayBuffer.byteLength);
 
       const chunkDuration = Math.floor((Date.now() - this.currentChunkStartTime) / 1000);
       const now = new Date();
@@ -656,22 +978,12 @@ class WorkInvigilatorApp {
       const userEmail = this.currentUser.email || this.currentUser.id;
       const filename = `${userEmail}/${date}/${time}_chunk_${chunkNumber}.webm`;
 
-      console.log('💾 [AUDIO] Chunk metadata:', {
-        chunkNumber,
-        duration: chunkDuration + 's',
-        filename,
-        userEmail,
-        organizationId: this.organizationId
-      });
-
       let primaryUrl = null;
       let backupUrl = null;
 
       // Try Backblaze first (if enabled)
-      console.log('☁️ [BACKBLAZE] Enabled?', this.backblazeEnabled);
       if (this.backblazeEnabled) {
         try {
-          console.log('☁️ [BACKBLAZE] Starting upload...');
           const { data: backblazeData, error: backblazeError } = await window.electronAPI.backblazeStorage('upload', {
             bucket: 'audio-recordings',
             path: filename,
@@ -680,23 +992,13 @@ class WorkInvigilatorApp {
 
           if (!backblazeError && backblazeData) {
             primaryUrl = backblazeData.publicUrl;
-            console.log('✅ [BACKBLAZE] Upload successful. URL:', primaryUrl);
-          } else {
-            console.error('❌ [BACKBLAZE] Upload failed:', backblazeError);
           }
         } catch (error) {
-          console.error('❌ [BACKBLAZE] Upload exception:', {
-            message: error.message,
-            name: error.name,
-            stack: error.stack
-          });
+          // Backblaze upload failed, will use Supabase
         }
-      } else {
-        console.log('⏭️ [BACKBLAZE] Skipped (disabled)');
       }
 
       // Always upload to Supabase (as backup or primary)
-      console.log('☁️ [SUPABASE] Starting storage upload...');
       let uploadData, uploadError;
 
       try {
@@ -705,24 +1007,12 @@ class WorkInvigilatorApp {
           .upload(filename, arrayBuffer);
         uploadData = uploadResult.data;
         uploadError = uploadResult.error;
-
-        console.log('☁️ [SUPABASE] Upload result:', {
-          hasData: !!uploadData,
-          hasError: !!uploadError,
-          error: uploadError
-        });
       } catch (error) {
         uploadError = error;
-        console.error('❌ [SUPABASE] Upload exception:', {
-          message: error.message,
-          name: error.name,
-          stack: error.stack
-        });
       }
 
       // If token expired, refresh and retry once
       if (uploadError && (uploadError.message?.includes('exp') || uploadError.message?.includes('token'))) {
-        console.log('🔄 [SUPABASE] Token expired, refreshing and retrying...');
         await this.refreshAuthToken();
 
         const retryResult = await this.supabase.storage
@@ -730,39 +1020,27 @@ class WorkInvigilatorApp {
           .upload(filename, arrayBuffer);
         uploadData = retryResult.data;
         uploadError = retryResult.error;
-
-        console.log('🔄 [SUPABASE] Retry result:', {
-          hasData: !!uploadData,
-          hasError: !!uploadError,
-          error: uploadError
-        });
       }
 
       if (uploadError) {
-        console.error('❌ [SUPABASE] Upload error:', uploadError);
         // If both failed, return
         if (!primaryUrl) {
-          console.error('💥 [CRITICAL] Both Backblaze and Supabase failed for chunk', chunkNumber);
           return;
         }
       } else {
-        console.log('☁️ [SUPABASE] Getting public URL...');
         const urlData = await this.supabase.storage
           .from('audio-recordings')
           .getPublicUrl(filename);
 
         backupUrl = urlData.publicUrl;
-        console.log('✅ [SUPABASE] Public URL obtained:', backupUrl);
 
         if (!primaryUrl) {
           // If Backblaze failed/disabled, use Supabase as primary
           primaryUrl = backupUrl;
-          console.log('ℹ️ [SUPABASE] Using Supabase as primary storage');
         }
       }
 
       // Save to database with primary URL and backup URL
-      console.log('💾 [DATABASE] Inserting chunk record...');
       const dbRecord = {
         user_id: this.currentUser.id,
         organization_id: this.organizationId,
@@ -775,7 +1053,6 @@ class WorkInvigilatorApp {
         duration_seconds: chunkDuration,
         chunk_start_time: new Date(this.currentChunkStartTime).toISOString()
       };
-      console.log('💾 [DATABASE] Record to insert:', dbRecord);
 
       const { error: dbError } = await this.supabase
         .from('recording_chunks')
@@ -788,22 +1065,10 @@ class WorkInvigilatorApp {
           file_url: primaryUrl,
           duration: chunkDuration
         });
-        console.log('✅ [DATABASE] Chunk record inserted successfully. Total session chunks:', this.sessionChunks.length);
-      } else {
-        console.error('❌ [DATABASE] Insert failed for chunk', chunkNumber, {
-          error: dbError,
-          message: dbError.message,
-          details: dbError.details,
-          hint: dbError.hint
-        });
       }
 
     } catch (error) {
-      console.error('💥 [AUDIO] Save chunk error:', {
-        message: error.message,
-        name: error.name,
-        stack: error.stack
-      });
+      // Error saving chunk
     }
   }
   
@@ -951,7 +1216,6 @@ class WorkInvigilatorApp {
         await this.saveScreenshot(result.dataUrl);
       }
     } catch (error) {
-      console.error('❌ Screenshot capture failed:', error);
     }
   }
   
@@ -982,10 +1246,8 @@ class WorkInvigilatorApp {
           if (!backblazeError && backblazeData) {
             primaryUrl = backblazeData.publicUrl;
           } else {
-            console.error('❌ FAILED: Backblaze screenshot upload error:', backblazeError);
           }
         } catch (error) {
-          console.error('❌ FAILED: Backblaze screenshot upload exception:', error.message);
         }
       }
 
@@ -1014,10 +1276,8 @@ class WorkInvigilatorApp {
       }
 
       if (uploadError) {
-        console.error('❌ FAILED: Supabase screenshot upload error:', uploadError);
         // If both failed, return
         if (!primaryUrl) {
-          console.error('💥 CRITICAL: Both Backblaze and Supabase failed for screenshot');
           return;
         }
       } else {
@@ -1047,29 +1307,35 @@ class WorkInvigilatorApp {
         }]);
 
     } catch (error) {
-      console.error('💥 Save screenshot error:', error);
     }
   }
   
   async saveMonitoringState() {
     await window.electronAPI.storeSet('isMonitoring', this.isMonitoring);
     await window.electronAPI.storeSet('sessionStartTime', this.sessionStartTime?.getTime());
+    await window.electronAPI.storeSet('currentSessionId', this.currentSessionId);
   }
   
   async loadMonitoringState() {
     const monitoringResult = await window.electronAPI.storeGet('isMonitoring');
     const sessionResult = await window.electronAPI.storeGet('sessionStartTime');
+    const sessionIdResult = await window.electronAPI.storeGet('currentSessionId');
     
     if (monitoringResult.success && monitoringResult.value && this.currentUser) {
+      
       this.isMonitoring = true;
       if (sessionResult.value) {
         this.sessionStartTime = new Date(sessionResult.value);
+      }
+      if (sessionIdResult.value) {
+        this.currentSessionId = sessionIdResult.value;
       }
       
       await this.startRecording();
       this.startSessionTimer();
       this.startScreenshotCapture();
       this.updateMonitoringUI(true);
+      
     }
   }
   
