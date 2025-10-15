@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
           .eq('user_id', employee.id)
           .gte('created_at', sevenDaysAgo.toISOString())
           .order('created_at', { ascending: false })
+          .limit(5000) // Reasonable limit - new indexes make this efficient
 
         // Get audio recordings from last 7 days
         const { data: audioChunks } = await supabaseAdmin

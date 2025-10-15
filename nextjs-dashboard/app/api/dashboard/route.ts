@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
         .select('user_id, created_at')
         .eq('organization_id', organizationId)
         .gte('created_at', twoMinutesAgo.toISOString())
-        .range(0, 999999) // Bypass default limit
+        .limit(10000) // Reasonable limit - will use new indexes efficiently
 
       activeUserIds = [...new Set((recentScreenshots || []).map(s => s.user_id))]
       
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
         })
         
         // Create synthetic sessions
-        activeSessions = activeUserIds.map((userId, index) => ({
+        activeSessions = activeUserIds.map((userId) => ({
           id: `synthetic_${userId}`,
           user_id: userId,
           session_start_time: userScreenshotMap.get(userId) || new Date().toISOString(),
@@ -150,14 +150,15 @@ export async function GET(request: NextRequest) {
       .gte('date', startDate.toISOString().split('T')[0])
       .lte('date', endDate.toISOString().split('T')[0])
 
-    // If no sessions exist, get all screenshots to estimate metrics
+    // If no sessions exist, get screenshots to estimate metrics
+    // Use optimized query with new indexes - limit to prevent excessive IO
     const { data: allPeriodScreenshots } = await supabaseAdmin
       .from('screenshots')
       .select('user_id, created_at')
       .eq('organization_id', organizationId)
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString())
-      .range(0, 9999999) // Fetch all screenshots without limit
+      .limit(50000) // Reasonable limit - new indexes make this fast
 
     // Get screenshots for the period filtered by organization
     const { data: periodScreenshots } = await supabaseAdmin

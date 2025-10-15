@@ -5,7 +5,6 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
-    const range = searchParams.get('range') || 'today'
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
 
@@ -16,61 +15,29 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Calculate date range
+    // Calculate date range - default to today if not provided
     let dateStart: Date
-    let dateEnd: Date = new Date()
-    dateEnd.setHours(23, 59, 59, 999)
+    let dateEnd: Date
+    let range = 'custom'
 
-    switch (range) {
-      case 'today':
-        dateStart = new Date()
-        dateStart.setHours(0, 0, 0, 0)
-        break
-      case 'yesterday':
-        dateStart = new Date()
-        dateStart.setDate(dateStart.getDate() - 1)
-        dateStart.setHours(0, 0, 0, 0)
-        dateEnd = new Date()
-        dateEnd.setDate(dateEnd.getDate() - 1)
-        dateEnd.setHours(23, 59, 59, 999)
-        break
-      case 'week':
-        dateStart = new Date()
-        const dayOfWeek = dateStart.getDay()
-        const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-        dateStart.setDate(dateStart.getDate() - diff)
-        dateStart.setHours(0, 0, 0, 0)
-        break
-      case 'lastWeek':
-        dateStart = new Date()
-        const lastWeekDay = dateStart.getDay()
-        const lastWeekDiff = lastWeekDay === 0 ? 6 : lastWeekDay - 1
-        dateStart.setDate(dateStart.getDate() - lastWeekDiff - 7)
-        dateStart.setHours(0, 0, 0, 0)
-        dateEnd = new Date(dateStart)
-        dateEnd.setDate(dateEnd.getDate() + 6)
-        dateEnd.setHours(23, 59, 59, 999)
-        break
-      case 'month':
-        dateStart = new Date()
-        dateStart.setDate(1)
-        dateStart.setHours(0, 0, 0, 0)
-        break
-      case 'custom':
-        if (!startDate || !endDate) {
-          return NextResponse.json(
-            { error: 'Start date and end date are required for custom range' },
-            { status: 400 }
-          )
-        }
-        dateStart = new Date(startDate)
-        dateStart.setHours(0, 0, 0, 0)
-        dateEnd = new Date(endDate)
-        dateEnd.setHours(23, 59, 59, 999)
-        break
-      default:
-        dateStart = new Date()
-        dateStart.setHours(0, 0, 0, 0)
+    if (startDate) {
+      dateStart = new Date(startDate)
+      dateStart.setHours(0, 0, 0, 0)
+    } else {
+      // Default to today
+      dateStart = new Date()
+      dateStart.setHours(0, 0, 0, 0)
+      range = 'today'
+    }
+
+    if (endDate) {
+      dateEnd = new Date(endDate)
+      dateEnd.setHours(23, 59, 59, 999)
+    } else {
+      // Default to today
+      dateEnd = new Date()
+      dateEnd.setHours(23, 59, 59, 999)
+      if (!startDate) range = 'today'
     }
 
     // Get all employees in the organization (including admins)
