@@ -4,9 +4,11 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 export async function GET(request: NextRequest) {
   try {
 
-    // Get organization_id from query params (passed from frontend)
+    // Get organization_id and date range from query params
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
+    const dateFrom = searchParams.get('dateFrom')
+    const dateTo = searchParams.get('dateTo')
 
     if (!organizationId) {
       return NextResponse.json(
@@ -14,6 +16,10 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Default to current month if no dates provided
+    const startDate = dateFrom || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+    const endDate = dateTo || new Date().toISOString().split('T')[0]
 
     // Get employees filtered by organization
     const { data: employees, error: employeesError } = await supabaseAdmin
@@ -41,44 +47,79 @@ export async function GET(request: NextRequest) {
     // Calculate real metrics for each employee
     const employeesWithMetrics = await Promise.all(
       employees.map(async (employee) => {
-        // Get last 7 days of data
-        const sevenDaysAgo = new Date()
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-
-        // Get screenshots from last 7 days (limited for performance)
+        // Get screenshots from date range
         const { data: screenshots, count: totalScreenshots } = await supabaseAdmin
           .from('screenshots')
           .select('created_at', { count: 'exact', head: false })
           .eq('user_id', employee.id)
-          .gte('created_at', sevenDaysAgo.toISOString())
+          .gte('created_at', `${startDate}T00:00:00.000Z`)
+          .lte('created_at', `${endDate}T23:59:59.999Z`)
           .order('created_at', { ascending: false })
-          .limit(100) // Limit to 100 most recent screenshots for performance
+          .limit(1000) // Increased limit for monthly data
 
-        // Get audio recordings from last 7 days (limited for performance)
+        // Get audio recordings from date range
         const { data: audioChunks } = await supabaseAdmin
           .from('audio_chunks')
           .select('created_at, duration_seconds')
           .eq('user_id', employee.id)
-          .gte('created_at', sevenDaysAgo.toISOString())
-          .limit(100) // Limit to 100 most recent audio chunks
+          .gte('created_at', `${startDate}T00:00:00.000Z`)
+          .lte('created_at', `${endDate}T23:59:59.999Z`)
+          .limit(1000)
 
-        // Get employee sessions from last 7 days (if exists)
-        const { data: sessions } = await supabaseAdmin
+        // Get employee sessions from date range
+        const { data: allSessions } = await supabaseAdmin
           .from('recording_sessions')
           .select('*')
           .eq('user_id', employee.id)
-          .gte('session_start_time', sevenDaysAgo.toISOString())
+          .gte('session_start_time', `${startDate}T00:00:00.000Z`)
+          .lte('session_start_time', `${endDate}T23:59:59.999Z`)
           .order('session_start_time', { ascending: false })
 
-        // Get productivity metrics from last 7 days
+        // Filter out invalid sessions
+        // Valid session criteria:
+        // 1. Must have end time (completed session)
+        // 2. Duration must be between 1 second and 24 hours (86400 seconds)
+        // 3. Duration must not be null or negative
+        const validSessions = allSessions?.filter(s => {
+          if (!s.session_end_time) return false; // Skip active sessions
+          if (!s.total_duration_seconds) return false; // Skip null durations
+          if (s.total_duration_seconds < 0) return false; // Skip negative durations
+          if (s.total_duration_seconds > 86400) return false; // Skip sessions > 24 hours
+          return true;
+        }) || []
+
+        // Remove overlapping sessions (keep only the first one in each overlap)
+        // Sort by start time first
+        const sortedSessions = [...validSessions].sort((a, b) =>
+          new Date(a.session_start_time).getTime() - new Date(b.session_start_time).getTime()
+        )
+
+        const sessions = []
+        let lastEndTime = 0
+
+        for (const session of sortedSessions) {
+          const startTime = new Date(session.session_start_time).getTime()
+          const endTime = new Date(session.session_end_time).getTime()
+
+          // Only include if it doesn't overlap with previous session
+          if (startTime >= lastEndTime) {
+            sessions.push(session)
+            lastEndTime = endTime
+          } else {
+            console.warn(`Skipping overlapping session for employee ${employee.email}`)
+          }
+        }
+
+        // Get productivity metrics from date range
         const { data: metrics } = await supabaseAdmin
           .from('productivity_metrics')
           .select('*')
           .eq('user_id', employee.id)
-          .gte('date', sevenDaysAgo.toISOString().split('T')[0])
+          .gte('date', startDate)
+          .lte('date', endDate)
 
-        // Calculate total work time from sessions OR estimate from screenshots/audio
-        let totalWorkSeconds = sessions?.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0) || 0
+        // Calculate total work time from valid sessions only
+        let totalWorkSeconds = sessions.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0)
 
         // If no sessions, estimate work time from audio chunks
         if (totalWorkSeconds === 0 && audioChunks && audioChunks.length > 0) {
@@ -96,29 +137,32 @@ export async function GET(request: NextRequest) {
         const productivity7d = totalWorkSeconds > 0 ?
           Number(((totalFocusSeconds / totalWorkSeconds) * 100).toFixed(1)) : 0
 
-        // Get break sessions for this employee (last 7 days)
+        // Get break sessions for this employee from date range
         const { data: breakSessions } = await supabaseAdmin
           .from('break_sessions')
           .select('break_duration_ms')
           .eq('user_id', employee.id)
           .eq('organization_id', organizationId)
-          .gte('break_date', sevenDaysAgo.toISOString().split('T')[0])
+          .gte('break_date', startDate)
+          .lte('break_date', endDate)
 
         const totalBreakMs = breakSessions?.reduce((sum, b) => sum + (b.break_duration_ms || 0), 0) || 0
         const totalBreakSeconds = Math.floor(totalBreakMs / 1000)
-        const totalBreakHours = totalBreakSeconds / 3600
+        const totalBreakHours = Number((totalBreakSeconds / 3600).toFixed(1))
 
-        // Calculate average break hours per day (total break hours / number of days with breaks)
-        const avgBreakHDay = breakSessions && breakSessions.length > 0 ?
-          Number((totalBreakHours / 7).toFixed(1)) : 0
+        // Calculate total work hours
+        let totalWorkHours = Number((totalWorkSeconds / 3600).toFixed(1))
 
-        // Calculate average session from sessions OR estimate from work time
-        let avgSessionMin = 0
-        if (sessions && sessions.length > 0) {
-          avgSessionMin = Math.round((totalWorkSeconds / sessions.length) / 60)
-        } else if (totalWorkSeconds > 0) {
-          // Estimate based on typical work sessions (assume multiple sessions per day)
-          avgSessionMin = Math.round(totalWorkSeconds / 60 / 7) // Average per day
+        // Realistic work hours cap
+        // Maximum reasonable work hours:
+        // - 30 days × 12 hours/day = 360 hours (extreme overtime every day)
+        // - 22 work days × 16 hours/day = 352 hours (very long shifts)
+        // Cap at 360 hours - anything above indicates overlapping sessions or data issues
+        const REALISTIC_MAX_HOURS = 360
+
+        if (totalWorkHours > REALISTIC_MAX_HOURS) {
+          console.warn(`Employee ${employee.email} has unrealistic work hours: ${totalWorkHours}h. Capping at ${REALISTIC_MAX_HOURS}h.`)
+          totalWorkHours = REALISTIC_MAX_HOURS
         }
 
         // Determine last active time from screenshots, audio, or sessions
@@ -174,8 +218,8 @@ export async function GET(request: NextRequest) {
           department: employee.department || 'General',
           role: employee.role || 'user',
           productivity7d,
-          avgBreakHDay,
-          avgSessionMin,
+          totalBreakHours,
+          totalWorkHours,
           lastActive,
           status: status as 'online' | 'offline',
           createdAt: employee.created_at,

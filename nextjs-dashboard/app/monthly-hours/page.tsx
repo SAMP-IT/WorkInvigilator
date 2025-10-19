@@ -373,8 +373,8 @@ export default function MonthlyHoursPage() {
                     <TableRow>
                       <TableHead>Employee</TableHead>
                       <TableHead>Department</TableHead>
-                      <TableHead>Work Hours</TableHead>
-                      <TableHead>Net Hours</TableHead>
+                      <TableHead>Total Work (h)</TableHead>
+                      <TableHead>Total Break (h)</TableHead>
                       <TableHead>Working Days</TableHead>
                       <TableHead>Overtime</TableHead>
                       <TableHead>Salary</TableHead>
@@ -400,10 +400,10 @@ export default function MonthlyHoursPage() {
                               <Badge variant="outline" size="sm">{employee.department}</Badge>
                             </TableCell>
                             <TableCell>
-                              <span className="font-mono text-ink-hi">{employee.totalWorkHours}h</span>
+                              <span className="font-mono text-ink-hi">{employee.totalWorkHours.toFixed(1)}h</span>
                             </TableCell>
                             <TableCell>
-                              <span className="font-mono text-primary font-semibold">{employee.totalNetHours}h</span>
+                              <span className="font-mono text-ink-mid">{employee.totalBreakHours.toFixed(1)}h</span>
                             </TableCell>
                             <TableCell>
                               <span className="text-ink-mid">{employee.workingDays} days</span>

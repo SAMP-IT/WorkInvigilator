@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/auth-context';
 import { AttendanceCalendar } from '@/components/attendance/AttendanceCalendar';
 import { AttendanceStats } from '@/components/attendance/AttendanceStats';
 import { AttendanceTable } from '@/components/attendance/AttendanceTable';
@@ -34,41 +35,26 @@ interface AttendanceStats {
 }
 
 export default function AttendancePage() {
+  const { profile, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [stats, setStats] = useState<AttendanceStats | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [employees, setEmployees] = useState<any[]>([]);
-  const [organizationId, setOrganizationId] = useState<string>('');
 
   useEffect(() => {
-    loadUserProfile();
-  }, []);
-
-  useEffect(() => {
-    if (organizationId) {
+    if (!authLoading && profile?.organization_id) {
       loadEmployees();
       loadAttendanceData();
     }
-  }, [organizationId, selectedMonth, selectedEmployee]);
-
-  const loadUserProfile = async () => {
-    try {
-      const response = await fetch('/api/dashboard');
-      const data = await response.json();
-
-      if (data.user?.organizationId) {
-        setOrganizationId(data.user.organizationId);
-      }
-    } catch (error) {
-      console.error('Failed to load profile:', error);
-    }
-  };
+  }, [authLoading, profile?.organization_id, selectedMonth, selectedEmployee]);
 
   const loadEmployees = async () => {
+    if (!profile?.organization_id) return;
+
     try {
-      const response = await fetch(`/api/employees?organizationId=${organizationId}`);
+      const response = await fetch(`/api/employees?organizationId=${profile.organization_id}`);
       const data = await response.json();
 
       if (data.employees) {
@@ -80,6 +66,8 @@ export default function AttendancePage() {
   };
 
   const loadAttendanceData = async () => {
+    if (!profile?.organization_id) return;
+
     try {
       setLoading(true);
 
@@ -88,7 +76,7 @@ export default function AttendancePage() {
       const endDate = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0);
 
       const params = new URLSearchParams({
-        organizationId,
+        organizationId: profile.organization_id,
         startDate: startDate.toISOString().split('T')[0],
         endDate: endDate.toISOString().split('T')[0],
       });

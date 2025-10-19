@@ -30,8 +30,8 @@ interface Employee {
   department: string;
   role: string;
   productivity7d: number;
-  avgBreakHDay: number;
-  avgSessionMin: number;
+  totalBreakHours: number; // Changed from avgBreakHDay
+  totalWorkHours: number; // Changed from avgSessionMin
   lastActive: string;
   status: "online" | "offline";
   createdAt: string;
@@ -68,6 +68,15 @@ function EmployeesPageContent() {
   const [newHourlyRate, setNewHourlyRate] = useState<string>("");
   const [isSavingRate, setIsSavingRate] = useState(false);
 
+  // Date range filter (default to current month)
+  const [dateFrom, setDateFrom] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  });
+  const [dateTo, setDateTo] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
       emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -94,7 +103,7 @@ function EmployeesPageContent() {
       setError("No organization found");
       setLoading(false);
     }
-  }, [authLoading, profile?.organization_id]);
+  }, [authLoading, profile?.organization_id, dateFrom, dateTo]);
 
   const loadEmployees = async () => {
     try {
@@ -108,7 +117,7 @@ function EmployeesPageContent() {
       }
 
       const response = await fetch(
-        `/api/employees?organizationId=${profile.organization_id}`
+        `/api/employees?organizationId=${profile.organization_id}&dateFrom=${dateFrom}&dateTo=${dateTo}`
       );
 
       if (!response.ok) {
@@ -157,7 +166,6 @@ function EmployeesPageContent() {
 
   const formatProductivity = (value: number) => `${(value || 0).toFixed(1)}%`;
   const formatHours = (value: number) => `${(value || 0).toFixed(1)}h`;
-  const formatMinutes = (value: number) => `${value || 0}min`;
 
   const handleExportCSV = () => {
     // Create CSV content
@@ -166,8 +174,8 @@ function EmployeesPageContent() {
       "Email",
       "Department",
       "Role",
-      "Avg Break (h)",
-      "Avg Session (min)",
+      "Total Break (h)",
+      "Total Work (h)",
       "Hourly Rate ($)",
       "Last Active",
       "Status",
@@ -180,8 +188,8 @@ function EmployeesPageContent() {
           `"${emp.email}"`,
           `"${emp.department}"`,
           `"${emp.role}"`,
-          emp.avgBreakHDay.toFixed(1),
-          emp.avgSessionMin,
+          emp.totalBreakHours.toFixed(1),
+          emp.totalWorkHours.toFixed(1),
           (emp.hourlyRate || 0).toFixed(2),
           `"${emp.lastActive}"`,
           emp.status,
@@ -427,7 +435,29 @@ function EmployeesPageContent() {
         {showFilters && (
           <Card>
             <CardContent className="py-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-ink-hi mb-2">
+                    From Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink-hi mb-2">
+                    To Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-ink-hi mb-2">
                     Department
@@ -506,8 +536,8 @@ function EmployeesPageContent() {
                 <TableHead>Employee</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead sortable>Avg Break</TableHead>
-                <TableHead sortable>Avg Session</TableHead>
+                <TableHead sortable>Total Break (h)</TableHead>
+                <TableHead sortable>Total Work (h)</TableHead>
                 <TableHead sortable>Hourly Rate</TableHead>
                 <TableHead sortable>Last Active</TableHead>
                 <TableHead>Actions</TableHead>
@@ -619,12 +649,12 @@ function EmployeesPageContent() {
                     </TableCell>
                     <TableCell>
                       <span className="cell-num font-mono text-ink-mid">
-                        {formatHours(employee.avgBreakHDay)}
+                        {formatHours(employee.totalBreakHours)}
                       </span>
                     </TableCell>
                     <TableCell>
                       <span className="cell-num font-mono text-ink-mid">
-                        {formatMinutes(employee.avgSessionMin)}
+                        {formatHours(employee.totalWorkHours)}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -716,15 +746,15 @@ function EmployeesPageContent() {
                     {/* Quick Stats */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-raised p-3 rounded-lg">
-                        <div className="text-xs text-ink-muted">Break Time</div>
+                        <div className="text-xs text-ink-muted">Total Break</div>
                         <div className="text-lg font-semibold text-ink-hi font-mono">
-                          {formatHours(employee.avgBreakHDay)}
+                          {formatHours(employee.totalBreakHours)}
                         </div>
                       </div>
                       <div className="bg-raised p-3 rounded-lg">
-                        <div className="text-xs text-ink-muted">Avg Session</div>
+                        <div className="text-xs text-ink-muted">Total Work</div>
                         <div className="text-lg font-semibold text-ink-hi font-mono">
-                          {formatMinutes(employee.avgSessionMin)}
+                          {formatHours(employee.totalWorkHours)}
                         </div>
                       </div>
                     </div>

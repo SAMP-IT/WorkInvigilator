@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
+    const startDate = searchParams.get('startDate')
+    const endDate = searchParams.get('endDate')
     const page = parseInt(searchParams.get('page') || '1', 10)
     const limit = parseInt(searchParams.get('limit') || '50', 10)
     const offset = (page - 1) * limit
@@ -45,13 +47,104 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get recording sessions for this organization with pagination
-    const { data: sessions, count: totalSessions } = await supabaseAdmin
+    // Build query for recording sessions with date filtering
+    let query = supabaseAdmin
       .from('recording_sessions')
       .select('*', { count: 'exact' })
       .eq('organization_id', organizationId)
-      .order('session_start_time', { ascending: false })
+
+    // Add date range filtering if provided
+    if (startDate) {
+      query = query.gte('session_start_time', `${startDate}T00:00:00.000Z`)
+    }
+    if (endDate) {
+      query = query.lte('session_start_time', `${endDate}T23:59:59.999Z`)
+    }
+
+    // Apply ordering and pagination
+    query = query.order('session_start_time', { ascending: false })
       .range(offset, offset + limit - 1)
+
+    // Execute query
+    const { data: sessions, count: totalSessions } = await query
+
+    // Auto-close stale sessions
+    // A session is considered "stale" if:
+    // 1. Started >24 hours ago (clearly old)
+    // 2. OR no screenshots in last 30 minutes (employee stopped working but didn't click "Stop")
+    if (sessions && sessions.length > 0) {
+      const now = new Date()
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000)
+
+      const staleSessions = []
+
+      for (const session of sessions) {
+        if (session.session_end_time) continue // Already closed, skip
+
+        const sessionStartTime = new Date(session.session_start_time)
+
+        // Rule 1: Sessions older than 24 hours are definitely stale
+        if (sessionStartTime < twentyFourHoursAgo) {
+          staleSessions.push(session)
+          continue
+        }
+
+        // Rule 2: Check if there are recent screenshots (activity in last 30 minutes)
+        const { data: recentScreenshots, count } = await supabaseAdmin
+          .from('screenshots')
+          .select('*', { count: 'exact', head: true })
+          .eq('session_id', session.id)
+          .gte('created_at', thirtyMinutesAgo.toISOString())
+
+        // If no screenshots in last 30 minutes, session is stale
+        if (!count || count === 0) {
+          staleSessions.push(session)
+        }
+      }
+
+      if (staleSessions.length > 0) {
+        console.log(`🔄 Auto-closing ${staleSessions.length} stale sessions...`)
+
+        // Update each stale session to close it
+        for (const staleSession of staleSessions) {
+          // Calculate end time as 8 hours after start (assumed work day)
+          // or last screenshot time if available
+          const startTime = new Date(staleSession.session_start_time)
+          const estimatedEndTime = new Date(startTime.getTime() + 8 * 60 * 60 * 1000) // +8 hours
+
+          // Check if there are screenshots to determine actual end time
+          const { data: lastScreenshot } = await supabaseAdmin
+            .from('screenshots')
+            .select('created_at')
+            .eq('session_id', staleSession.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single()
+
+          const endTime = lastScreenshot ? new Date(lastScreenshot.created_at) : estimatedEndTime
+
+          // Calculate actual duration
+          const durationSeconds = Math.floor((endTime.getTime() - startTime.getTime()) / 1000)
+
+          // Update the session
+          await supabaseAdmin
+            .from('recording_sessions')
+            .update({
+              session_end_time: endTime.toISOString(),
+              total_duration_seconds: durationSeconds
+            })
+            .eq('id', staleSession.id)
+
+          console.log(`✅ Auto-closed session ${staleSession.id} (${durationSeconds / 3600}h)`)
+        }
+
+        // Re-fetch sessions after auto-closing stale ones
+        const { data: updatedSessions, count: updatedCount } = await query
+        sessions.length = 0 // Clear array
+        sessions.push(...(updatedSessions || [])) // Replace with updated data
+      }
+    }
 
     let formattedSessions
 

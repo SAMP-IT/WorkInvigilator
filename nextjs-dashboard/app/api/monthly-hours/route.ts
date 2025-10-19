@@ -49,7 +49,51 @@ export async function GET(request: NextRequest) {
       sessionsQuery = sessionsQuery.eq('user_id', employeeId)
     }
 
-    const { data: sessions } = await sessionsQuery
+    const { data: allSessions } = await sessionsQuery
+
+    // Validate and filter sessions to remove invalid/overlapping ones
+    const validSessions = allSessions?.filter(s => {
+      if (!s.session_end_time) return false // Skip active sessions for monthly calculation
+      if (!s.total_duration_seconds) return false // Skip null durations
+      if (s.total_duration_seconds < 0) return false // Skip negative durations
+      if (s.total_duration_seconds > 86400) return false // Skip sessions > 24 hours
+      return true
+    }) || []
+
+    // Group sessions by user to check for overlaps per employee
+    const sessionsByUser = new Map<string, any[]>()
+    validSessions.forEach(session => {
+      if (!sessionsByUser.has(session.user_id)) {
+        sessionsByUser.set(session.user_id, [])
+      }
+      sessionsByUser.get(session.user_id)!.push(session)
+    })
+
+    // Remove overlapping sessions for each employee
+    const sessions: any[] = []
+    sessionsByUser.forEach((userSessions, userId) => {
+      // Sort sessions by start time
+      const sortedSessions = [...userSessions].sort((a, b) =>
+        new Date(a.session_start_time).getTime() - new Date(b.session_start_time).getTime()
+      )
+
+      // Keep only non-overlapping sessions
+      let lastEndTime = 0
+      sortedSessions.forEach(session => {
+        const startTime = new Date(session.session_start_time).getTime()
+        const endTime = new Date(session.session_end_time).getTime()
+
+        // Only include if it doesn't overlap with previous session
+        if (startTime >= lastEndTime) {
+          sessions.push(session)
+          lastEndTime = endTime
+        } else {
+          console.warn(`⚠️ Skipping overlapping session for user ${userId}: ${session.id}`)
+        }
+      })
+    })
+
+    console.log(`📊 Monthly Hours: Filtered ${allSessions?.length || 0} → ${sessions.length} sessions (removed ${(allSessions?.length || 0) - sessions.length} invalid/overlapping)`)
 
     // Get break sessions
     let breaksQuery = supabaseAdmin
@@ -191,9 +235,17 @@ export async function GET(request: NextRequest) {
                new Date(`${yearB}-${monthB}-${dayB}`).getTime()
       })
 
-      const totalWorkHours = totalWorkSeconds / 3600
+      let totalWorkHours = totalWorkSeconds / 3600
       const totalBreakHours = totalBreakSeconds / 3600
-      const totalNetHours = Math.max(0, totalWorkHours - totalBreakHours)
+      let totalNetHours = Math.max(0, totalWorkHours - totalBreakHours)
+
+      // Apply realistic maximum cap (360 hours/month = 30 days × 12 hours max)
+      const REALISTIC_MAX_HOURS = 360
+      if (totalWorkHours > REALISTIC_MAX_HOURS) {
+        console.warn(`⚠️ Employee ${employeeName} has unrealistic work hours: ${totalWorkHours.toFixed(1)}h. Capping at ${REALISTIC_MAX_HOURS}h.`)
+        totalWorkHours = REALISTIC_MAX_HOURS
+        totalNetHours = Math.max(0, totalWorkHours - totalBreakHours)
+      }
 
       // Calculate salary if hourly rate is available
       const hourlyRate = profile?.hourly_rate || 0

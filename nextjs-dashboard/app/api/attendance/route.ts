@@ -17,13 +17,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Build query
+    // Build query - fetch attendance records first
     let query = supabaseAdmin
       .from('attendance_records')
-      .select(`
-        *,
-        profiles!inner(id, name, email)
-      `)
+      .select('*')
       .eq('organization_id', organizationId)
       .order('date', { ascending: false });
 
@@ -48,12 +45,32 @@ export async function GET(request: NextRequest) {
     const { data: records, error } = await query;
 
     if (error) {
+      console.error('❌ Supabase query error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Get unique user IDs from records
+    const userIds = [...new Set(records?.map(r => r.user_id) || [])];
+
+    // Fetch profiles separately
+    const { data: profiles, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, name, email')
+      .in('id', userIds);
+
+    if (profileError) {
+      console.error('❌ Error fetching profiles:', profileError);
+    }
+
+    // Create profile lookup map
+    const profileMap = (profiles || []).reduce((acc, p) => {
+      acc[p.id] = p;
+      return acc;
+    }, {} as Record<string, { id: string; name: string; email: string }>);
+
     // Format records
     const formattedRecords = records?.map((record: any) => {
-      const profile = record.profiles;
+      const profile = profileMap[record.user_id];
       const workHours = record.total_work_seconds / 3600;
       const breakHours = record.total_break_seconds / 3600;
       const idleHours = record.total_idle_seconds / 3600;
@@ -82,7 +99,7 @@ export async function GET(request: NextRequest) {
         workHours: parseFloat(workHours.toFixed(2)),
         breakHours: parseFloat(breakHours.toFixed(2)),
         idleHours: parseFloat(idleHours.toFixed(2)),
-        totalHours: parseFloat(((workHours + breakHours + idleHours).toFixed(2))),
+        totalHours: parseFloat((workHours + breakHours + idleHours).toFixed(2)),
         status: record.status,
         isLate: record.is_late,
         lateByMinutes: record.late_by_minutes || 0,
@@ -97,9 +114,9 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Attendance GET API error:', error);
+    console.error('❌ Attendance GET API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
