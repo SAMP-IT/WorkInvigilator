@@ -11,6 +11,7 @@ class LiveStreamManager {
     this.channel = null;
     this.presenceKey = null; // Store our presence key (like socket.id)
     this.peers = new Map(); // Map of viewerPresenceKey -> SimplePeer instance
+    this.pendingIceCandidates = new Map(); // Buffer ICE candidates that arrive before peer is created
     this.localStream = null;
     this.cameraStream = null;
     this.isStreaming = false;
@@ -20,40 +21,40 @@ class LiveStreamManager {
     this.isConnected = false;
   }
 
-  async initialize(user, organizationId, supabaseUrl, supabaseAnonKey) {
+  async initialize(user, organizationId, supabaseClient) {
     this.currentUser = user;
     this.organizationId = organizationId;
 
-    // Create Supabase client
-    this.supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      realtime: {
-        params: {
-          eventsPerSecond: 10
-        }
-      }
-    });
+    // Use the authenticated Supabase client (with JWT token) passed from renderer
+    // This is required for private channels with RLS policies
+    this.supabase = supabaseClient;
 
     console.log('📡 Connecting to Supabase Realtime...');
 
     // Create organization-specific channel for WebRTC signaling
     const channelName = `live-monitoring:${organizationId}`;
+    console.log('📡 Channel name:', channelName);
+    console.log('📡 Organization ID:', organizationId);
 
-    // Use compound key (userId:role) to allow same user to be both viewer and streamer
-    this.presenceKey = `${user.id}:streamer`;
+    // Use compound key with session ID to make each app instance unique
+    // Format: userId:role:sessionId (must match dashboard format)
+    const sessionId = Math.random().toString(36).substring(2, 15);
+    this.presenceKey = `${user.id}:streamer:${sessionId}`;
+    console.log('📡 My presence key will be:', this.presenceKey);
 
     this.channel = this.supabase.channel(channelName, {
       config: {
         broadcast: {
-          self: false // Don't receive our own messages
+          self: false, // Don't receive our own messages
+          ack: false // Don't wait for acknowledgment - faster delivery
         },
-        presence: {
-          key: this.presenceKey
-        }
+        presence: { key: this.presenceKey },
+        private: true // REQUIRED for broadcasts to work properly with RLS
       }
     });
 
-    // Set up channel listeners
-    await this.setupChannelListeners();
+    // Set up channel listeners FIRST (before subscribe)
+    this.setupChannelListeners();
 
     // Subscribe to channel
     const subscriptionStatus = await this.channel.subscribe(async (status) => {
@@ -81,6 +82,8 @@ class LiveStreamManager {
   }
 
   async setupChannelListeners() {
+    console.log('🔧 Setting up channel listeners...');
+
     // Listen for presence changes
     this.channel
       .on('presence', { event: 'sync' }, () => {
@@ -94,21 +97,42 @@ class LiveStreamManager {
         console.log('👋 User left:', key, leftPresences);
       });
 
-    // Listen for broadcast messages
+    // Listen for ALL broadcast messages (test listener)
     this.channel
-      .on('broadcast', { event: 'signaling' }, ({ payload }) => {
-        console.log('📨 Received broadcast:', payload);
-        this.handleSignalingMessage(payload);
+      .on('broadcast', { event: 'signaling' }, (data) => {
+        console.log('📨 RAW BROADCAST RECEIVED!');
+        console.log('📨 Full data:', JSON.stringify(data, null, 2));
+        console.log('📨 Payload:', data.payload);
+        console.log('📨 Payload type:', data.payload?.type);
+        console.log('📨 My presence key:', this.presenceKey);
+        console.log('📨 Target presence key:', data.payload?.to);
+
+        // Call the handler
+        if (data.payload) {
+          this.handleSignalingMessage(data.payload);
+        } else {
+          console.error('❌ No payload in broadcast message!');
+        }
       });
+
+    console.log('✅ Channel listeners set up successfully');
   }
 
   handleSignalingMessage(message) {
+    // Log ALL messages to debug routing
+    console.log('📨 RAW MESSAGE HANDLER CALLED');
+    console.log('📨 Message type:', message.type);
+    console.log('📨 Message from:', message.from);
+    console.log('📨 Message to:', message.to);
+    console.log('📨 My presence key:', this.presenceKey);
+
     // Ignore messages not meant for us (check presence key, not userId)
     if (message.to && message.to !== this.presenceKey) {
+      console.log('⏭️ Skipping message - not for us');
       return;
     }
 
-    console.log('📨 Processing message for presence key:', this.presenceKey);
+    console.log('✅ Processing message for presence key:', this.presenceKey);
 
     switch (message.type) {
       case 'webrtc:offer':
@@ -123,7 +147,12 @@ class LiveStreamManager {
           // SimplePeer expects the full signal object
           peer.signal(message.payload.candidate);
         } else {
-          console.warn('⚠️ No peer found for presence key:', message.from);
+          // Buffer ICE candidate for when peer is created
+          console.log('📦 Buffering ICE candidate for:', message.from);
+          if (!this.pendingIceCandidates.has(message.from)) {
+            this.pendingIceCandidates.set(message.from, []);
+          }
+          this.pendingIceCandidates.get(message.from).push(message.payload.candidate);
         }
         break;
     }
@@ -340,10 +369,14 @@ class LiveStreamManager {
         stream: this.localStream,
         config: {
           iceServers: [
+            // STUN servers for NAT discovery
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' }
-          ]
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' }
+          ],
+          iceCandidatePoolSize: 10
         }
       });
 
@@ -377,6 +410,16 @@ class LiveStreamManager {
 
       // Signal the offer
       peer.signal(offer);
+
+      // Process any buffered ICE candidates for this peer
+      if (this.pendingIceCandidates.has(viewerPresenceKey)) {
+        const bufferedCandidates = this.pendingIceCandidates.get(viewerPresenceKey);
+        console.log(`📦 Processing ${bufferedCandidates.length} buffered ICE candidates for:`, viewerPresenceKey);
+        bufferedCandidates.forEach(candidate => {
+          peer.signal(candidate);
+        });
+        this.pendingIceCandidates.delete(viewerPresenceKey);
+      }
 
     } catch (error) {
       console.error('❌ Error handling offer:', error);
@@ -483,6 +526,30 @@ class LiveStreamManager {
     }
 
     this.isConnected = false;
+  }
+
+  async updateBreakStatus(isOnBreak) {
+    if (!this.channel || !this.isConnected) {
+      console.warn('⚠️ Cannot update break status: not connected to Realtime');
+      return;
+    }
+
+    try {
+      // Update presence with break status
+      await this.channel.track({
+        userId: this.currentUser.id,
+        userName: this.currentUser.email,
+        userEmail: this.currentUser.email,
+        role: 'streamer',
+        streamActive: true,
+        isOnBreak: isOnBreak,
+        connectedAt: new Date().toISOString()
+      });
+
+      console.log(`${isOnBreak ? '⏸️' : '▶️'} Updated break status: ${isOnBreak ? 'ON BREAK' : 'ACTIVE'}`);
+    } catch (error) {
+      console.error('Failed to update break status:', error);
+    }
   }
 
   getStatus() {

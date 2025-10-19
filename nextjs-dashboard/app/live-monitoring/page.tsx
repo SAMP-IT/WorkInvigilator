@@ -25,6 +25,7 @@ const GRID_SIZES: Record<string, GridSize> = {
 export default function LiveMonitoringSupabasePage() {
   const { user, profile } = useAuth();
   const [signaling, setSignaling] = useState<SupabaseRealtimeSignaling | null>(null);
+  const signalingRef = useRef<SupabaseRealtimeSignaling | null>(null); // Add ref for immediate access
   const [streamers, setStreamers] = useState<StreamerInfo[]>([]);
   const [activeStreams, setActiveStreams] = useState<Set<string>>(new Set());
   const [gridSize, setGridSize] = useState<string>('9');
@@ -37,6 +38,11 @@ export default function LiveMonitoringSupabasePage() {
   const [mutedStreams, setMutedStreams] = useState<Set<string>>(new Set());
   const [cameraEnabled, setCameraEnabled] = useState<Set<string>>(new Set());
   const [fullscreenUserId, setFullscreenUserId] = useState<string | null>(null);
+  const [pausedStreams, setPausedStreams] = useState<Set<string>>(new Set());
+  const connectionTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const retryAttempts = useRef<Map<string, number>>(new Map());
+  const MAX_RETRY_ATTEMPTS = 3;
+  const CONNECTION_TIMEOUT = 15000; // 15 seconds
 
   useEffect(() => {
     console.log('🔍 Live monitoring effect triggered:', {
@@ -76,6 +82,53 @@ export default function LiveMonitoringSupabasePage() {
     realtimeSignaling.on('streamers:list', (streamersData: StreamerInfo[]) => {
       console.log('📋 Received streamers list:', streamersData);
       setStreamers(streamersData);
+
+      // Auto-start streams for all available streamers (up to grid capacity)
+      const currentSize = GRID_SIZES[gridSize];
+      streamersData.forEach((streamer, index) => {
+        // Only auto-start if within grid capacity and not already active
+        if (index < currentSize.max && !activeStreams.has(streamer.userId)) {
+          console.log('🎬 Auto-starting stream for:', streamer.userEmail);
+          setActiveStreams(prev => new Set([...prev, streamer.userId]));
+
+          // Create peer connection for auto-started stream
+          setTimeout(() => {
+            createPeerConnection(streamer.presenceKey, streamer.userId);
+          }, 100 * index); // Stagger connection attempts slightly
+        }
+      });
+
+      // Auto-pause/resume streams based on break status
+      streamersData.forEach(streamer => {
+        const video = videoRefsMap.current.get(streamer.userId);
+        const cameraVideo = cameraRefsMap.current.get(streamer.userId);
+
+        if (streamer.isOnBreak) {
+          // Pause if on break and not already paused
+          if (!pausedStreams.has(streamer.userId)) {
+            video?.pause();
+            cameraVideo?.pause();
+            setPausedStreams(prev => {
+              const newSet = new Set(prev);
+              newSet.add(streamer.userId);
+              return newSet;
+            });
+            console.log('⏸️ Auto-paused stream (user on break):', streamer.userId);
+          }
+        } else {
+          // Resume if not on break and currently paused
+          if (pausedStreams.has(streamer.userId)) {
+            video?.play().catch(err => console.error('Error resuming video:', err));
+            cameraVideo?.play().catch(err => console.error('Error resuming camera:', err));
+            setPausedStreams(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(streamer.userId);
+              return newSet;
+            });
+            console.log('▶️ Auto-resumed stream (user ended break):', streamer.userId);
+          }
+        }
+      });
     });
 
     // Streamer became available
@@ -87,6 +140,22 @@ export default function LiveMonitoringSupabasePage() {
           return prev.map(s => s.presenceKey === streamerInfo.presenceKey ? streamerInfo : s);
         }
         return [...prev, streamerInfo];
+      });
+
+      // Auto-start new streamer if within grid capacity
+      setActiveStreams(prev => {
+        const currentSize = GRID_SIZES[gridSize];
+        if (prev.size < currentSize.max && !prev.has(streamerInfo.userId)) {
+          console.log('🎬 Auto-starting new streamer:', streamerInfo.userEmail);
+
+          // Create peer connection
+          setTimeout(() => {
+            createPeerConnection(streamerInfo.presenceKey, streamerInfo.userId);
+          }, 100);
+
+          return new Set([...prev, streamerInfo.userId]);
+        }
+        return prev;
       });
     });
 
@@ -188,6 +257,8 @@ export default function LiveMonitoringSupabasePage() {
     // Initialize connection
     realtimeSignaling.initialize(profile.organization_id, user.id, 'viewer');
 
+    // Store in both state and ref for immediate access
+    signalingRef.current = realtimeSignaling;
     setSignaling(realtimeSignaling);
 
     return () => {
@@ -199,7 +270,7 @@ export default function LiveMonitoringSupabasePage() {
     };
   }, [user?.id, profile?.organization_id]);
 
-  const createPeerConnection = async (presenceKey: string, targetUserId: string) => {
+  const createPeerConnection = async (presenceKey: string, targetUserId: string, isRetry: boolean = false) => {
     // Check if peer connection already exists
     const existingPeer = peersRef.current.get(presenceKey);
     if (existingPeer && !existingPeer.destroyed) {
@@ -219,7 +290,22 @@ export default function LiveMonitoringSupabasePage() {
       });
     }
 
-    console.log('🔗 Creating new peer connection for:', presenceKey, '(userId:', targetUserId, ')');
+    // Clear any existing timeout
+    const existingTimeout = connectionTimeouts.current.get(presenceKey);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+      connectionTimeouts.current.delete(presenceKey);
+    }
+
+    // Get current retry count
+    const currentRetries = retryAttempts.current.get(presenceKey) || 0;
+
+    if (isRetry) {
+      console.log(`🔄 Retry attempt ${currentRetries + 1}/${MAX_RETRY_ATTEMPTS} for:`, presenceKey);
+    } else {
+      console.log('🔗 Creating new peer connection for:', presenceKey, '(userId:', targetUserId, ')');
+      retryAttempts.current.set(presenceKey, 0);
+    }
 
     const peer = new SimplePeer({
       initiator: true,
@@ -230,10 +316,14 @@ export default function LiveMonitoringSupabasePage() {
       },
       config: {
         iceServers: [
+          // STUN servers for NAT discovery
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' }
-        ]
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' }
+        ],
+        iceCandidatePoolSize: 10
       }
     });
 
@@ -256,6 +346,29 @@ export default function LiveMonitoringSupabasePage() {
       pc.addTransceiver('audio', { direction: 'recvonly' });
 
       console.log('✅ Transceivers added for 2 video + 1 audio tracks');
+
+      // Monitor ICE connection state for better debugging
+      pc.oniceconnectionstatechange = () => {
+        console.log(`🧊 ICE connection state for ${presenceKey}:`, pc.iceConnectionState);
+
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+          console.warn(`⚠️ ICE connection ${pc.iceConnectionState} for:`, presenceKey);
+        }
+
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          console.log(`✅ ICE connection established for:`, presenceKey);
+        }
+      };
+
+      // Monitor ICE gathering state
+      pc.onicegatheringstatechange = () => {
+        console.log(`🧊 ICE gathering state for ${presenceKey}:`, pc.iceGatheringState);
+      };
+
+      // Monitor connection state
+      pc.onconnectionstatechange = () => {
+        console.log(`🔗 Connection state for ${presenceKey}:`, pc.connectionState);
+      };
     }
 
     // Handle incoming stream - track all video tracks separately
@@ -288,18 +401,56 @@ export default function LiveMonitoringSupabasePage() {
           const screenStream = new MediaStream([screenTrack]);
 
           // Add audio tracks to screen video
-          audioTracks.forEach(track => screenStream.addTrack(track));
+          audioTracks.forEach(track => {
+            screenStream.addTrack(track);
+            console.log('🔊 Added audio track to screen stream:', track.id.substring(0, 8), 'enabled:', track.enabled);
+          });
 
+          console.log('📺 Setting screen stream with', screenStream.getTracks().length, 'tracks');
           video.srcObject = screenStream;
-          video.muted = false;
-          video.volume = 1.0;
 
-          video.play()
-            .then(() => {
-              console.log('✅ Video playing for:', targetUserId);
-              console.log('🎬 Video dimensions:', video.videoWidth, 'x', video.videoHeight);
-            })
-            .catch(err => console.error('Error playing video:', err));
+          // IMPORTANT: Start muted to allow autoplay (browser policy)
+          // User can unmute later using the mute toggle button
+          video.muted = true;
+          video.volume = 1.0;
+          console.log('🔊 Screen video muted: true (for autoplay)');
+
+          // Wait for video metadata to load before playing
+          const handleLoadedMetadata = () => {
+            video.play()
+              .then(() => {
+                console.log('✅ Screen video playing for:', targetUserId);
+                console.log('🎬 Video dimensions:', video.videoWidth, 'x', video.videoHeight);
+                console.log('🔊 Audio tracks in stream:', screenStream.getAudioTracks().map(t => ({
+                  id: t.id.substring(0, 8),
+                  enabled: t.enabled,
+                  muted: t.muted
+                })));
+
+                // Initialize muted state to match video element (starts muted for autoplay)
+                setMutedStreams(prev => {
+                  const newSet = new Set(prev);
+                  newSet.add(targetUserId);
+                  console.log('🔇 Initialized stream as muted for:', targetUserId);
+                  return newSet;
+                });
+              })
+              .catch(err => {
+                if (err.name !== 'AbortError') {
+                  console.error('Error playing video:', err);
+                }
+              });
+            video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+          };
+
+          video.addEventListener('loadedmetadata', handleLoadedMetadata);
+
+          // If metadata is already loaded, play immediately
+          if (video.readyState >= 1) {
+            handleLoadedMetadata();
+          }
+        } else {
+          console.log('⏳ Screen video element not ready yet for:', targetUserId);
         }
       }
 
@@ -364,17 +515,58 @@ export default function LiveMonitoringSupabasePage() {
           const video = videoRefsMap.current.get(targetUserId);
           if (video) {
             const screenStream = new MediaStream([screenTrack]);
-            audioTracks.forEach(track => screenStream.addTrack(track));
-            video.srcObject = screenStream;
-            video.muted = false;
-            video.volume = 1.0;
 
-            video.play()
-              .then(() => {
-                console.log('✅ Video playing for:', targetUserId);
-                console.log('🎬 Video dimensions:', video.videoWidth, 'x', video.videoHeight);
-              })
-              .catch(err => console.error('Error playing video:', err));
+            // Add audio tracks to screen video with logging
+            audioTracks.forEach(track => {
+              screenStream.addTrack(track);
+              console.log('🔊 [Track Event] Added audio track to screen stream:', track.id.substring(0, 8), 'enabled:', track.enabled);
+            });
+
+            console.log('📺 [Track Event] Setting screen stream with', screenStream.getTracks().length, 'tracks');
+            video.srcObject = screenStream;
+
+            // IMPORTANT: Start muted to allow autoplay (browser policy)
+            // User can unmute later using the mute toggle button
+            video.muted = true;
+            video.volume = 1.0;
+            console.log('🔊 [Track Event] Screen video muted: true (for autoplay)');
+
+            // Wait for video metadata to load before playing
+            const handleLoadedMetadata = () => {
+              video.play()
+                .then(() => {
+                  console.log('✅ [Track Event] Screen video playing for:', targetUserId);
+                  console.log('🎬 Video dimensions:', video.videoWidth, 'x', video.videoHeight);
+                  console.log('🔊 Audio tracks in stream:', screenStream.getAudioTracks().map(t => ({
+                    id: t.id.substring(0, 8),
+                    enabled: t.enabled,
+                    muted: t.muted
+                  })));
+
+                  // Initialize muted state to match video element (starts muted for autoplay)
+                  setMutedStreams(prev => {
+                    const newSet = new Set(prev);
+                    newSet.add(targetUserId);
+                    console.log('🔇 [Track Event] Initialized stream as muted for:', targetUserId);
+                    return newSet;
+                  });
+                })
+                .catch(err => {
+                  if (err.name !== 'AbortError') {
+                    console.error('Error playing video:', err);
+                  }
+                });
+              video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+            };
+
+            video.addEventListener('loadedmetadata', handleLoadedMetadata);
+
+            // If metadata is already loaded, play immediately
+            if (video.readyState >= 1) {
+              handleLoadedMetadata();
+            }
+          } else {
+            console.log('⏳ [Track Event] Screen video element not ready yet for:', targetUserId);
           }
         }
 
@@ -416,21 +608,42 @@ export default function LiveMonitoringSupabasePage() {
 
     // Handle signals (offers, answers, ICE candidates)
     peer.on('signal', (data: any) => {
+      console.log('🔔 PEER SIGNAL EVENT!', data.type || 'candidate');
       if (data.type === 'offer') {
         console.log('📤 Sending offer to:', presenceKey, '(userId:', targetUserId, ')');
-        signaling?.sendOffer(presenceKey, targetUserId, data);
+        console.log('📤 Signaling ref exists?', !!signalingRef.current);
+        console.log('📤 sendOffer function exists?', !!signalingRef.current?.sendOffer);
+        signalingRef.current?.sendOffer(presenceKey, targetUserId, data);
       } else if (data.candidate) {
         console.log('🧊 Sending ICE candidate to:', presenceKey, '(userId:', targetUserId, ')');
-        signaling?.sendIceCandidate(presenceKey, targetUserId, data);
+        signalingRef.current?.sendIceCandidate(presenceKey, targetUserId, data);
       }
     });
 
     peer.on('connect', () => {
       console.log('✅ Successfully connected to:', presenceKey);
+
+      // Clear timeout on successful connection
+      const timeout = connectionTimeouts.current.get(presenceKey);
+      if (timeout) {
+        clearTimeout(timeout);
+        connectionTimeouts.current.delete(presenceKey);
+      }
+
+      // Reset retry count
+      retryAttempts.current.set(presenceKey, 0);
     });
 
     peer.on('close', () => {
       console.log('❌ Peer connection closed:', presenceKey);
+
+      // Clear timeout
+      const timeout = connectionTimeouts.current.get(presenceKey);
+      if (timeout) {
+        clearTimeout(timeout);
+        connectionTimeouts.current.delete(presenceKey);
+      }
+
       peersRef.current.delete(presenceKey);
       setPeers(prev => {
         const newPeers = new Map(prev);
@@ -441,13 +654,76 @@ export default function LiveMonitoringSupabasePage() {
 
     peer.on('error', (error: Error) => {
       console.error('❌ Peer error:', error);
+
+      // Clear timeout
+      const timeout = connectionTimeouts.current.get(presenceKey);
+      if (timeout) {
+        clearTimeout(timeout);
+        connectionTimeouts.current.delete(presenceKey);
+      }
+
+      // Clean up failed peer
       peersRef.current.delete(presenceKey);
       setPeers(prev => {
         const newPeers = new Map(prev);
         newPeers.delete(presenceKey);
         return newPeers;
       });
+
+      // Retry connection if under max attempts
+      const currentRetries = retryAttempts.current.get(presenceKey) || 0;
+      if (currentRetries < MAX_RETRY_ATTEMPTS) {
+        console.log(`🔄 Will retry connection for: ${presenceKey} (attempt ${currentRetries + 1}/${MAX_RETRY_ATTEMPTS})`);
+        retryAttempts.current.set(presenceKey, currentRetries + 1);
+
+        // Wait a bit before retrying (exponential backoff)
+        const retryDelay = Math.min(1000 * Math.pow(2, currentRetries), 5000);
+        setTimeout(() => {
+          createPeerConnection(presenceKey, targetUserId, true);
+        }, retryDelay);
+      } else {
+        console.error(`❌ Max retry attempts reached for: ${presenceKey}`);
+        retryAttempts.current.delete(presenceKey);
+      }
     });
+
+    // Set connection timeout
+    const timeout = setTimeout(() => {
+      // Get the peer and check its connection state
+      const peer = peersRef.current.get(presenceKey);
+
+      // @ts-expect-error - Access internal _pc property
+      const pc = peer?._pc as RTCPeerConnection | undefined;
+
+      // Only timeout if peer is not connected
+      if (pc && (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed')) {
+        console.log(`✅ Connection already established for: ${presenceKey}, ignoring timeout`);
+        connectionTimeouts.current.delete(presenceKey);
+        return;
+      }
+
+      console.warn(`⏱️ Connection timeout for: ${presenceKey} (state: ${pc?.iceConnectionState || 'unknown'})`);
+
+      // Destroy peer if still not connected
+      if (peer && !peer.destroyed) {
+        peer.destroy();
+      }
+
+      connectionTimeouts.current.delete(presenceKey);
+
+      // Retry connection if under max attempts
+      const currentRetries = retryAttempts.current.get(presenceKey) || 0;
+      if (currentRetries < MAX_RETRY_ATTEMPTS) {
+        console.log(`🔄 Retrying after timeout for: ${presenceKey} (attempt ${currentRetries + 1}/${MAX_RETRY_ATTEMPTS})`);
+        retryAttempts.current.set(presenceKey, currentRetries + 1);
+        createPeerConnection(presenceKey, targetUserId, true);
+      } else {
+        console.error(`❌ Max retry attempts reached for: ${presenceKey}`);
+        retryAttempts.current.delete(presenceKey);
+      }
+    }, CONNECTION_TIMEOUT);
+
+    connectionTimeouts.current.set(presenceKey, timeout);
 
     // Store peer connection using presence key (both ref and state)
     peersRef.current.set(presenceKey, peer);
@@ -510,6 +786,33 @@ export default function LiveMonitoringSupabasePage() {
       setFullscreenUserId(userId);
       console.log('🖼️ Entered fullscreen for:', userId);
     }
+  };
+
+  const togglePause = (userId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    const video = videoRefsMap.current.get(userId);
+    const cameraVideo = cameraRefsMap.current.get(userId);
+
+    setPausedStreams(prev => {
+      const newSet = new Set(prev);
+      const shouldPause = !newSet.has(userId);
+
+      if (shouldPause) {
+        // Pause both screen and camera videos
+        video?.pause();
+        cameraVideo?.pause();
+        newSet.add(userId);
+        console.log('⏸️ Paused stream for:', userId);
+      } else {
+        // Resume both screen and camera videos
+        video?.play().catch(err => console.error('Error resuming video:', err));
+        cameraVideo?.play().catch(err => console.error('Error resuming camera:', err));
+        newSet.delete(userId);
+        console.log('▶️ Resumed stream for:', userId);
+      }
+
+      return newSet;
+    });
   };
 
   const toggleStream = async (userId: string) => {
@@ -670,7 +973,7 @@ export default function LiveMonitoringSupabasePage() {
                     }}
                     autoPlay
                     playsInline
-                    muted={false}
+                    muted={true}
                     controls={false}
                     className="w-full h-full object-cover bg-black"
                   />
@@ -683,6 +986,12 @@ export default function LiveMonitoringSupabasePage() {
                         <div className="flex items-center space-x-2 mt-1">
                           <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
                           <span className="text-xs text-gray-300">LIVE</span>
+                          {streamer?.isOnBreak && (
+                            <>
+                              <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                              <span className="text-xs text-amber-400 font-semibold">ON BREAK</span>
+                            </>
+                          )}
                         </div>
                       </div>
                       <button
@@ -899,6 +1208,12 @@ export default function LiveMonitoringSupabasePage() {
                 {streamers.find(s => s.userId === fullscreenUserId)?.userEmail}
               </span>
               <span className="text-gray-400 text-sm">LIVE - Fullscreen</span>
+              {streamers.find(s => s.userId === fullscreenUserId)?.isOnBreak && (
+                <>
+                  <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                  <span className="text-amber-400 text-sm font-semibold">ON BREAK</span>
+                </>
+              )}
             </div>
             <button
               onClick={(e) => toggleFullscreen(fullscreenUserId, e)}
@@ -925,7 +1240,7 @@ export default function LiveMonitoringSupabasePage() {
               }}
               autoPlay
               playsInline
-              muted={mutedStreams.has(fullscreenUserId)}
+              muted={true}
               controls={false}
               className="w-full h-full object-contain"
             />

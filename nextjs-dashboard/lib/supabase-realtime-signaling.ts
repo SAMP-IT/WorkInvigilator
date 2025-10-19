@@ -48,17 +48,21 @@ export class SupabaseRealtimeSignaling {
 
     console.log(`📡 Connecting to Supabase Realtime channel: ${channelName}`);
 
-    // Use compound key (userId:role) to allow same user to be both viewer and streamer
-    this.presenceKey = `${userId}:${role}`;
+    // Use compound key with session ID to make each tab/window unique
+    // Format: userId:role:sessionId
+    const sessionId = Math.random().toString(36).substring(2, 15);
+    this.presenceKey = `${userId}:${role}:${sessionId}`;
 
     this.channel = supabase.channel(channelName, {
       config: {
         broadcast: {
-          self: false // Don't receive our own messages
+          self: false, // Don't receive our own messages
+          ack: false // Don't wait for acknowledgment
         },
         presence: {
           key: this.presenceKey
-        }
+        },
+        private: true // REQUIRED for broadcasts to work properly with RLS
       }
     });
 
@@ -81,7 +85,8 @@ export class SupabaseRealtimeSignaling {
     // Listen to broadcast messages
     this.channel
       .on('broadcast', { event: 'signaling' }, ({ payload }) => {
-        console.log('📨 Received broadcast:', payload);
+        console.log('📨 DASHBOARD RECEIVED BROADCAST!');
+        console.log('📨 Payload:', payload);
         this.handleSignalingMessage(payload);
       });
 
@@ -183,11 +188,44 @@ export class SupabaseRealtimeSignaling {
       return;
     }
 
-    await this.channel.send({
+    console.log('📡 Broadcasting message:', {
+      type: message.type,
+      from: message.from,
+      to: message.to,
+      channelState: this.channel.state,
+      channelSubscribed: this.channel.state === 'joined'
+    });
+
+    // Wait for channel to be fully subscribed
+    if (this.channel.state !== 'joined') {
+      console.warn('⚠️ Channel not joined yet, state:', this.channel.state);
+      // Wait up to 5 seconds for channel to join
+      let waited = 0;
+      while (this.channel.state !== 'joined' && waited < 5000) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        waited += 100;
+      }
+      console.log('📡 Channel state after waiting:', this.channel.state);
+    }
+
+    console.log('📡 About to send broadcast...');
+    console.log('📡 Channel state:', this.channel.state);
+    console.log('📡 Channel topic:', this.channel.topic);
+
+    const result = await this.channel.send({
       type: 'broadcast',
       event: 'signaling',
       payload: message
     });
+
+    console.log('📡 Broadcast result:', result);
+    console.log('📡 Message payload:', JSON.stringify(message, null, 2));
+
+    if (result === 'ok') {
+      console.log('✅ Broadcast sent successfully');
+    } else {
+      console.error('❌ Broadcast failed:', result);
+    }
   }
 
   /**

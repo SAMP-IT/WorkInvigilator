@@ -556,12 +556,16 @@ class WorkInvigilatorApp {
 
   async initializeLiveStreamInBackground() {
     // Run live streaming initialization in background without blocking UI
+    console.log('🚀 Starting live streaming initialization in background...');
     try {
+      console.log('🔧 Step 1: Initialize live stream manager...');
       await this.initializeLiveStream();
+      console.log('🔧 Step 2: Start live streaming...');
       await this.startLiveStreaming();
-      console.log('✅ Live streaming initialized in background');
+      console.log('✅ Live streaming initialized in background successfully');
     } catch (error) {
-      console.error('Failed to initialize live streaming (non-critical):', error);
+      console.error('❌ Failed to initialize live streaming (non-critical):', error);
+      console.error('Error stack:', error.stack);
       // Don't fail the entire session if live streaming fails
     }
   }
@@ -1127,7 +1131,7 @@ class WorkInvigilatorApp {
     }
   }
   
-  startBreak() {
+  async startBreak() {
     if (!this.isMonitoring || this.isOnBreak) return;
 
     this.isOnBreak = true;
@@ -1135,6 +1139,11 @@ class WorkInvigilatorApp {
 
     if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
       this.mediaRecorder.pause();
+    }
+
+    // Update live streaming presence with break status
+    if (this.liveStreamManager) {
+      await this.liveStreamManager.updateBreakStatus(true);
     }
 
     // Start break timer
@@ -1171,6 +1180,11 @@ class WorkInvigilatorApp {
 
     if (this.mediaRecorder && this.mediaRecorder.state === 'paused') {
       this.mediaRecorder.resume();
+    }
+
+    // Update live streaming presence with break status
+    if (this.liveStreamManager) {
+      await this.liveStreamManager.updateBreakStatus(false);
     }
 
     // Update total break time display
@@ -1835,14 +1849,50 @@ class WorkInvigilatorApp {
         }
         this.liveStreamManager = new window.LiveStreamManager();
 
-        // Get Supabase config for live streaming
+        // Get Supabase config and create authenticated client for live streaming
         const supabaseConfig = await window.electronAPI.getSupabaseConfig();
+        const { createClient } = require('@supabase/supabase-js');
+
+        // Get access token and refresh token from storage
+        const tokenResult = await window.electronAPI.storeGet('accessToken');
+        const refreshTokenResult = await window.electronAPI.storeGet('refreshToken');
+        const accessToken = tokenResult.success ? tokenResult.value : null;
+        const refreshToken = refreshTokenResult.success ? refreshTokenResult.value : null;
+
+        console.log('🔑 Creating authenticated Supabase client...');
+        console.log('🔑 Has access token:', !!accessToken);
+        console.log('🔑 Has refresh token:', !!refreshToken);
+
+        if (!accessToken || !refreshToken) {
+          throw new Error('No access token or refresh token available for Realtime authentication');
+        }
+
+        // Create Supabase client for Realtime
+        const supabaseRealtimeClient = createClient(
+          supabaseConfig.url,
+          supabaseConfig.anon_key,
+          {
+            realtime: {
+              params: {
+                eventsPerSecond: 10
+              }
+            }
+          }
+        );
+
+        // Set the auth session on the client (this is required for private channels)
+        // The session includes the JWT token that will be sent in the phx_join payload
+        await supabaseRealtimeClient.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+
+        console.log('✅ Authenticated Supabase client created with session');
 
         const result = await this.liveStreamManager.initialize(
           this.currentUser,
           this.organizationId,
-          supabaseConfig.url,
-          supabaseConfig.anon_key
+          supabaseRealtimeClient
         );
 
         if (result.success) {
