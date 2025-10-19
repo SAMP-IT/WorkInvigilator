@@ -45,21 +45,22 @@ export async function GET(request: NextRequest) {
         const sevenDaysAgo = new Date()
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
-        // Get screenshots from last 7 days (as primary activity indicator)
-        const { data: screenshots } = await supabaseAdmin
+        // Get screenshots from last 7 days (limited for performance)
+        const { data: screenshots, count: totalScreenshots } = await supabaseAdmin
           .from('screenshots')
-          .select('created_at')
+          .select('created_at', { count: 'exact', head: false })
           .eq('user_id', employee.id)
           .gte('created_at', sevenDaysAgo.toISOString())
           .order('created_at', { ascending: false })
-          .limit(5000) // Reasonable limit - new indexes make this efficient
+          .limit(100) // Limit to 100 most recent screenshots for performance
 
-        // Get audio recordings from last 7 days
+        // Get audio recordings from last 7 days (limited for performance)
         const { data: audioChunks } = await supabaseAdmin
           .from('audio_chunks')
           .select('created_at, duration_seconds')
           .eq('user_id', employee.id)
           .gte('created_at', sevenDaysAgo.toISOString())
+          .limit(100) // Limit to 100 most recent audio chunks
 
         // Get employee sessions from last 7 days (if exists)
         const { data: sessions } = await supabaseAdmin
@@ -85,8 +86,8 @@ export async function GET(request: NextRequest) {
         }
 
         // If still no work time, estimate from screenshot count (assume 1 screenshot every 2 minutes)
-        if (totalWorkSeconds === 0 && screenshots && screenshots.length > 0) {
-          totalWorkSeconds = screenshots.length * 120 // 2 minutes per screenshot
+        if (totalWorkSeconds === 0 && totalScreenshots && totalScreenshots > 0) {
+          totalWorkSeconds = totalScreenshots * 120 // 2 minutes per screenshot
         }
 
         const totalFocusSeconds = metrics?.reduce((sum, m) => sum + (m.focus_time_seconds || 0), 0) ||
@@ -179,7 +180,8 @@ export async function GET(request: NextRequest) {
           status: status as 'online' | 'offline',
           createdAt: employee.created_at,
           shiftStartTime: employee.shift_start_time,
-          shiftEndTime: employee.shift_end_time
+          shiftEndTime: employee.shift_end_time,
+          hourlyRate: employee.hourly_rate || 0
         }
       })
     )
@@ -296,6 +298,126 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       { error: 'Failed to create employee' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const employeeId = searchParams.get('employeeId')
+    const organizationId = searchParams.get('organizationId')
+
+    if (!employeeId) {
+      return NextResponse.json(
+        { error: 'Employee ID is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'Organization ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Verify the employee belongs to the organization
+    const { data: employee, error: verifyError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, organization_id, email')
+      .eq('id', employeeId)
+      .eq('organization_id', organizationId)
+      .single()
+
+    if (verifyError || !employee) {
+      return NextResponse.json(
+        { error: 'Employee not found or does not belong to this organization' },
+        { status: 404 }
+      )
+    }
+
+    // Delete all related data for the employee
+    // 1. Delete screenshots
+    await supabaseAdmin
+      .from('screenshots')
+      .delete()
+      .eq('user_id', employeeId)
+
+    // 2. Delete audio chunks
+    await supabaseAdmin
+      .from('audio_chunks')
+      .delete()
+      .eq('user_id', employeeId)
+
+    // 3. Delete recording sessions
+    await supabaseAdmin
+      .from('recording_sessions')
+      .delete()
+      .eq('user_id', employeeId)
+
+    // 4. Delete productivity metrics
+    await supabaseAdmin
+      .from('productivity_metrics')
+      .delete()
+      .eq('user_id', employeeId)
+
+    // 5. Delete break sessions
+    await supabaseAdmin
+      .from('break_sessions')
+      .delete()
+      .eq('user_id', employeeId)
+
+    // 6. Delete activity logs
+    await supabaseAdmin
+      .from('activity_logs')
+      .delete()
+      .eq('user_id', employeeId)
+
+    // 7. Delete attendance records
+    await supabaseAdmin
+      .from('attendance')
+      .delete()
+      .eq('user_id', employeeId)
+
+    // 8. Delete idle time logs
+    await supabaseAdmin
+      .from('idle_time_logs')
+      .delete()
+      .eq('user_id', employeeId)
+
+    // 9. Delete the profile
+    const { error: profileDeleteError } = await supabaseAdmin
+      .from('profiles')
+      .delete()
+      .eq('id', employeeId)
+
+    if (profileDeleteError) {
+      return NextResponse.json(
+        { error: `Failed to delete profile: ${profileDeleteError.message}` },
+        { status: 500 }
+      )
+    }
+
+    // 10. Delete the auth user
+    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(employeeId)
+
+    if (authDeleteError) {
+      console.error('Failed to delete auth user:', authDeleteError)
+      // Continue anyway since profile is deleted
+    }
+
+    return NextResponse.json({
+      message: 'Employee account and all related data deleted successfully',
+      deletedEmployeeId: employeeId,
+      deletedEmail: employee.email
+    })
+
+  } catch (error) {
+    console.error('Error deleting employee:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete employee account' },
       { status: 500 }
     )
   }

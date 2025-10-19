@@ -335,7 +335,6 @@ export default function BreaksPage() {
               </div>
             ) : displayedBreaks.length === 0 ? (
               <div className="text-center py-8 text-ink-muted">
-                <div className="text-4xl mb-4">☕</div>
                 <p className="text-sm">
                   {selectedEmployee === 'all'
                     ? 'No break sessions found.'
@@ -360,16 +359,16 @@ export default function BreaksPage() {
                           </Badge>
                         </div>
                         <div className="flex items-center space-x-4 text-xs text-ink-muted">
-                          <span>📅 {breakSession.breakDate}</span>
+                          <span>{breakSession.breakDate}</span>
                           <span>•</span>
-                          <span>🕐 {breakSession.startTime}</span>
+                          <span>{breakSession.startTime}</span>
                           <span>→</span>
-                          <span>🕐 {breakSession.endTime}</span>
+                          <span>{breakSession.endTime}</span>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
                         <Badge variant="info">
-                          ☕ Break
+                          Break
                         </Badge>
                       </div>
                     </div>

@@ -160,7 +160,7 @@ export function TopBar() {
             onKeyDown={handleSearch}
           />
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-            <span className="text-ink-muted text-xs">⏎</span>
+            <span className="text-ink-muted text-xs">Enter</span>
           </div>
         </div>
       </div>

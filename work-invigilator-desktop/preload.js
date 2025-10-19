@@ -1,8 +1,9 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { ipcRenderer } = require('electron');
 
-// Expose protected methods that allow the renderer process to use
-// ipcRenderer without exposing the entire object
-contextBridge.exposeInMainWorld('electronAPI', {
+// With contextIsolation: false, we can directly expose APIs on window
+// No need for contextBridge - it only works when contextIsolation: true
+
+window.electronAPI = {
   // Supabase configuration
   getSupabaseConfig: () => ipcRenderer.invoke('get-supabase-config'),
 
@@ -31,9 +32,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Backblaze operations
   backblazeStorage: (operation, params) => ipcRenderer.invoke('backblaze-storage', operation, params),
 
+  // Activity tracking operations
+  getActiveWindow: () => ipcRenderer.invoke('get-active-window'),
+  startActivityTracking: (intervalMs) => ipcRenderer.invoke('start-activity-tracking', intervalMs),
+  stopActivityTracking: () => ipcRenderer.invoke('stop-activity-tracking'),
+  onActiveWindowChanged: (callback) => ipcRenderer.on('active-window-changed', (event, data) => callback(data)),
+
+  // Live streaming - Get screen sources via IPC
+  getScreenSources: () => ipcRenderer.invoke('get-screen-sources'),
+
   // Platform info
   platform: process.platform,
   isElectron: true
-});
-
-
+};

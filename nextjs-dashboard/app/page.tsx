@@ -8,6 +8,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { KpiIcon } from "@/components/ui/KpiIcon";
 import { Modal } from "@/components/ui/Modal";
+import { ProductivityGraph } from "@/components/charts/ProductivityGraph";
+import { ProductivityBreakdown } from "@/components/ui/ProductivityBreakdown";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import type { Profile } from "@/lib/supabase";
@@ -52,15 +54,39 @@ function HomePageContent() {
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [allDepartments, setAllDepartments] = useState<string[]>([]);
+  const [productivityData, setProductivityData] = useState<any>(null);
+  const [loadingProductivity, setLoadingProductivity] = useState(false);
 
   useEffect(() => {
     if (profile?.organization_id) {
       loadData();
       loadDepartments();
+      loadProductivityData();
     } else if (!authLoading) {
       setLoading(false)
     }
   }, [profile?.organization_id, authLoading, searchParams]);
+
+  async function loadProductivityData() {
+    if (!profile?.organization_id) return;
+
+    try {
+      setLoadingProductivity(true);
+      const period = searchParams?.get('period') || 'today';
+      const response = await fetch(
+        `/api/productivity-graph?organizationId=${profile.organization_id}&period=${period}`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setProductivityData(data);
+      }
+    } catch (error) {
+      console.error('Failed to load productivity data:', error);
+    } finally {
+      setLoadingProductivity(false);
+    }
+  }
 
   async function loadDepartments() {
     if (!profile?.organization_id) return;
@@ -259,6 +285,30 @@ function HomePageContent() {
 
         {/* Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {/* Productivity Graph */}
+          <Card hover>
+            <CardHeader>
+              <CardTitle>Productivity Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingProductivity ? (
+                <div className="flex items-center justify-center h-64">
+                  <div className="animate-pulse text-ink-muted">Loading...</div>
+                </div>
+              ) : productivityData ? (
+                <ProductivityGraph
+                  data={productivityData.distribution}
+                  showLegend={true}
+                  size="sm"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-64 text-ink-muted">
+                  <p className="text-sm">No data available</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Live Sessions */}
           <Card hover>
             <CardHeader>
@@ -400,7 +450,6 @@ function HomePageContent() {
                         />
                       ) : (
                         <div className="text-center text-ink-muted">
-                          <div className="text-lg">📸</div>
                           <p className="text-xs">{screenshot.employeeName}</p>
                         </div>
                       )}
@@ -413,7 +462,6 @@ function HomePageContent() {
                       className="aspect-video bg-raised rounded border border-line flex items-center justify-center"
                     >
                       <div className="text-center text-ink-muted">
-                        <div className="text-lg">📸</div>
                         <p className="text-xs">No Screenshot</p>
                       </div>
                     </div>
@@ -447,7 +495,7 @@ function HomePageContent() {
                 onClick={closeModal}
                 className="text-ink-muted hover:text-ink-hi"
               >
-                ✕
+                Close
               </button>
             </div>
 
@@ -485,12 +533,12 @@ function HomePageContent() {
                 </h4>
                 <div className="space-y-3">
                   <button className="w-full flex items-center justify-center px-4 py-3 bg-success text-white rounded-lg hover:bg-success/80 transition-colors font-medium">
-                    🔴 Listen to Live Audio
+                    Listen to Live Audio
                   </button>
 
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <p className="text-sm text-blue-800">
-                      <strong>💡 Tip:</strong> Go to Audio and Select the
+                      <strong>Tip:</strong> Go to Audio and Select the
                       Employee to listen to past audios
                     </p>
                   </div>
@@ -502,7 +550,7 @@ function HomePageContent() {
                       }
                       className="flex-1 flex items-center justify-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/80 transition-colors"
                     >
-                      🎧 Past Audios
+                      Past Audios
                     </button>
                     <button
                       onClick={() =>
@@ -512,7 +560,7 @@ function HomePageContent() {
                       }
                       className="flex-1 flex items-center justify-center px-4 py-2 bg-secondary text-white rounded-lg hover:bg-secondary/80 transition-colors"
                     >
-                      📸 Screenshots
+                      Screenshots
                     </button>
                   </div>
                 </div>

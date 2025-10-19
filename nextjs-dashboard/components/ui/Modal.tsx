@@ -78,7 +78,7 @@ export function Modal({
                 onClick={onClose}
                 className="ml-auto"
               >
-                ✕
+                Close
               </Button>
             )}
           </div>

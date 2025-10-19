@@ -29,6 +29,16 @@ interface UserSettings {
   dailyReports?: boolean;
 }
 
+interface Employee {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+  role: string;
+  status: 'online' | 'offline';
+  lastActive: string;
+}
+
 export default function SettingsPage() {
   const { profile, user } = useAuth();
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -43,9 +53,20 @@ export default function SettingsPage() {
     department: ''
   });
 
+  // Employee management states
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     if (profile?.organization_id && user?.id) {
       loadSettings();
+      // Load employees if user is admin
+      if (profile?.role === 'admin') {
+        loadEmployees();
+      }
     }
   }, [profile, user]);
 
@@ -134,6 +155,78 @@ export default function SettingsPage() {
     setIsEditing(false);
   };
 
+  const loadEmployees = async () => {
+    try {
+      setLoadingEmployees(true);
+
+      if (!profile?.organization_id) {
+        return;
+      }
+
+      const response = await fetch(`/api/employees?organizationId=${profile.organization_id}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch employees');
+      }
+
+      const data = await response.json();
+      setEmployees(data.employees || []);
+    } catch (err) {
+      console.error('Failed to load employees:', err);
+    } finally {
+      setLoadingEmployees(false);
+    }
+  };
+
+  const handleDeleteClick = (employee: Employee) => {
+    setSelectedEmployee(employee);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedEmployee || !profile?.organization_id) {
+      return;
+    }
+
+    try {
+      setDeleting(true);
+      setError(null);
+
+      const response = await fetch(
+        `/api/employees?employeeId=${selectedEmployee.id}&organizationId=${profile.organization_id}`,
+        {
+          method: 'DELETE',
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete employee');
+      }
+
+      const result = await response.json();
+      setSuccessMessage(`Successfully deleted ${selectedEmployee.email}`);
+
+      // Reload employees list
+      await loadEmployees();
+
+      // Close modal and reset
+      setShowDeleteModal(false);
+      setSelectedEmployee(null);
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete employee');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+    setSelectedEmployee(null);
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -147,12 +240,6 @@ export default function SettingsPage() {
             <Badge variant="warning">
               {loading ? '...' : settings?.role || 'USER'}
             </Badge>
-            <Button variant="outline">
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-              Switch Account
-            </Button>
           </div>
         </div>
 
@@ -315,6 +402,138 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Employee Management Section - Only for Admins */}
+        {settings?.role === 'admin' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Employee Account Management</CardTitle>
+              <p className="text-sm text-ink-muted mt-1">
+                Select an employee account to permanently delete it and all associated data
+              </p>
+            </CardHeader>
+            <CardContent>
+              {loadingEmployees ? (
+                <div className="text-center py-8">
+                  <div className="text-ink-muted">Loading employees...</div>
+                </div>
+              ) : employees.length === 0 ? (
+                <div className="text-center py-8 text-ink-muted">
+                  No employees found
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {employees.map((employee) => (
+                    <div
+                      key={employee.id}
+                      className="flex items-center justify-between p-4 border border-line rounded-lg hover:bg-raised transition-colors"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <Avatar
+                          fallback={employee.name.charAt(0).toUpperCase()}
+                          size="md"
+                        />
+                        <div>
+                          <div className="font-medium text-ink-hi">{employee.name}</div>
+                          <div className="text-sm text-ink-muted">{employee.email}</div>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <Badge variant={employee.status === 'online' ? 'success' : 'default'} size="sm">
+                              {employee.status}
+                            </Badge>
+                            <span className="text-xs text-ink-muted">{employee.department}</span>
+                            <span className="text-xs text-ink-muted">•</span>
+                            <span className="text-xs text-ink-muted">{employee.lastActive}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => handleDeleteClick(employee)}
+                        disabled={employee.id === user?.id}
+                      >
+                        {employee.id === user?.id ? 'Cannot Delete Self' : 'Delete Account'}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && selectedEmployee && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-surface border border-line rounded-lg p-6 max-w-md w-full mx-4">
+              <h3 className="text-xl font-semibold text-ink-hi mb-4">
+                Delete Employee Account
+              </h3>
+              <div className="space-y-4">
+                <div className="p-4 bg-danger/10 border border-danger/20 rounded-lg">
+                  <p className="text-danger font-medium mb-2">Warning: This action cannot be undone!</p>
+                  <p className="text-sm text-ink-mid">
+                    You are about to permanently delete the following employee account and ALL associated data:
+                  </p>
+                </div>
+
+                <div className="p-4 bg-raised rounded-lg space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm font-medium text-ink-hi">Name:</span>
+                    <span className="text-sm text-ink-mid">{selectedEmployee.name}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm font-medium text-ink-hi">Email:</span>
+                    <span className="text-sm text-ink-mid">{selectedEmployee.email}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm font-medium text-ink-hi">Department:</span>
+                    <span className="text-sm text-ink-mid">{selectedEmployee.department}</span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-raised rounded-lg">
+                  <p className="text-sm font-medium text-ink-hi mb-2">The following data will be permanently deleted:</p>
+                  <ul className="text-sm text-ink-mid space-y-1 list-disc list-inside">
+                    <li>All screenshots</li>
+                    <li>All audio recordings</li>
+                    <li>All recording sessions</li>
+                    <li>All productivity metrics</li>
+                    <li>All break records</li>
+                    <li>All activity logs</li>
+                    <li>All attendance records</li>
+                    <li>User profile and authentication</li>
+                  </ul>
+                </div>
+
+                {error && (
+                  <div className="p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex space-x-3 pt-2">
+                  <Button
+                    variant="danger"
+                    onClick={handleDeleteConfirm}
+                    disabled={deleting}
+                    className="flex-1"
+                  >
+                    {deleting ? 'Deleting...' : 'Yes, Delete Permanently'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleDeleteCancel}
+                    disabled={deleting}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

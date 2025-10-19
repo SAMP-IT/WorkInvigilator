@@ -163,7 +163,7 @@ export function AddEmployeeForm({ onSubmit, onCancel, loading = false }: AddEmpl
               disabled={loading}
             >
               <span className="text-ink-muted hover:text-ink-hi">
-                {showPassword ? "👁️" : "👁️‍🗨️"}
+                {showPassword ? "Hide" : "Show"}
               </span>
             </button>
           </div>
@@ -193,7 +193,7 @@ export function AddEmployeeForm({ onSubmit, onCancel, loading = false }: AddEmpl
               disabled={loading}
             >
               <span className="text-ink-muted hover:text-ink-hi">
-                {showConfirmPassword ? "👁️" : "👁️‍🗨️"}
+                {showConfirmPassword ? "Hide" : "Show"}
               </span>
             </button>
           </div>

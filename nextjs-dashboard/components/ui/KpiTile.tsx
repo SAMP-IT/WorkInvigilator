@@ -40,10 +40,10 @@ export function KpiTile({
 
   const getDeltaIcon = (direction: 'up' | 'down' | 'flat') => {
     switch (direction) {
-      case 'up': return '↗';
-      case 'down': return '↘';
-      case 'flat': return '→';
-      default: return '→';
+      case 'up': return '▲';
+      case 'down': return '▼';
+      case 'flat': return '—';
+      default: return '—';
     }
   };
 

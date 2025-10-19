@@ -436,7 +436,7 @@ export default function SessionsPage() {
                   size="sm"
                   onClick={() => setSelectedEmployee(null)}
                 >
-                  ✕
+                  Close
                 </Button>
               </div>
             </CardHeader>

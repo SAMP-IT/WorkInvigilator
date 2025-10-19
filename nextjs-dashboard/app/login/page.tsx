@@ -29,7 +29,7 @@ export default function LoginPage() {
           } else {
             // Employee - sign them out
             signOut()
-            setError('❌ Access Denied: This dashboard is for administrators only. Please use the Work Invigilator Desktop application.')
+            setError('Access Denied: This dashboard is for administrators only. Please use the Work Invigilator Desktop application.')
           }
         })
     }
@@ -90,7 +90,7 @@ export default function LoginPage() {
           if (profileData?.role !== 'admin') {
             // Employee trying to access admin dashboard - block them
             await signOut()
-            setError('❌ Access Denied: This dashboard is for administrators only. Please use the Work Invigilator Desktop application.')
+            setError('Access Denied: This dashboard is for administrators only. Please use the Work Invigilator Desktop application.')
             setLoading(false)
             return
           }

@@ -23,7 +23,13 @@
       "Bash(git commit -m \"$(cat <<''EOF''\nfix: Add Cloudflare Pages build configuration\n\n- Add .npmrc with legacy-peer-deps for @cloudflare/next-on-pages compatibility\n- Add wrangler.toml for Cloudflare configuration\n- Add Suspense boundaries for useSearchParams in page.tsx and audio/page.tsx\n- Configure Next.js for Cloudflare deployment\n- Add pages:build script for Cloudflare\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(git push:*)",
       "Bash(taskkill:*)",
-      "Bash(git checkout c:UsersBILL' KISHORE'personalworkinvigilator-extentionnextjs-dashboardapptimesheetpage.tsx)"
+      "Bash(git checkout c:UsersBILL' KISHORE'personalworkinvigilator-extentionnextjs-dashboardapptimesheetpage.tsx)",
+      "Bash(timeout /t 10)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(dir:*)",
+      "Bash(del productivitypage.tsx)",
+      "Bash(ping:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

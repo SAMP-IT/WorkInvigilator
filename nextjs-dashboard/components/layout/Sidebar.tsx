@@ -1,16 +1,29 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NavIcon } from "@/components/ui/NavIcon";
 
-const navigationItems = [
+interface NavigationItem {
+  name: string;
+  href: string;
+  icon: string;
+  subItems?: { name: string; href: string }[];
+}
+
+const navigationItems: NavigationItem[] = [
   {
     name: "Overview",
     href: "/",
     icon: "/overview.png",
+  },
+  {
+    name: "Live Monitoring",
+    href: "/live-monitoring",
+    icon: "/target.png",
   },
   {
     name: "Employees",
@@ -18,9 +31,43 @@ const navigationItems = [
     icon: "/employees.png",
   },
   {
+    name: "Attendance",
+    href: "/attendance",
+    icon: "/sessions.png",
+  },
+  {
     name: "Sessions",
     href: "/sessions",
-    icon: "/sessions.png",
+    icon: "/office.png",
+  },
+  {
+    name: "Timesheet",
+    href: "/timesheet",
+    icon: "/calendar.png",
+  },
+  {
+    name: "Monthly Hours",
+    href: "/monthly-hours",
+    icon: "/productivity.png",
+  },
+  {
+    name: "Productivity",
+    href: "/productivity",
+    icon: "/focus.png",
+    subItems: [
+      {
+        name: "Analytics",
+        href: "/productivity",
+      },
+      {
+        name: "Reports & Rankings",
+        href: "/productivity-reports",
+      },
+      {
+        name: "Detailed Breakdown",
+        href: "/productivity-breakdown",
+      },
+    ],
   },
   {
     name: "Screenshots",
@@ -38,16 +85,6 @@ const navigationItems = [
     icon: "/focus.png",
   },
   {
-    name: "Timesheet",
-    href: "/timesheet",
-    icon: "/productivity.png",
-  },
-  {
-    name: "Mute Events",
-    href: "/mute-events",
-    icon: "/audio.png",
-  },
-  {
     name: "Reports",
     href: "/reports",
     icon: "/report.png",
@@ -61,6 +98,22 @@ const navigationItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
+
+  // Auto-expand sections if on a related page
+  React.useEffect(() => {
+    if (pathname.startsWith('/productivity')) {
+      setExpandedItems(prev => prev.includes('Productivity') ? prev : [...prev, 'Productivity']);
+    }
+  }, [pathname]);
+
+  const toggleExpand = (itemName: string) => {
+    setExpandedItems(prev =>
+      prev.includes(itemName)
+        ? prev.filter(name => name !== itemName)
+        : [...prev, itemName]
+    );
+  };
 
   return (
     <div className="flex h-full w-64 flex-col bg-surface border-r border-line">
@@ -89,30 +142,96 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 py-6">
+      <nav className="flex-1 px-4 py-6 overflow-y-auto">
         <ul className="space-y-2">
           {navigationItems.map((item) => {
             const isActive = pathname === item.href;
+            const hasSubItems = item.subItems && item.subItems.length > 0;
+            const isExpanded = expandedItems.includes(item.name);
+            const isSubItemActive = hasSubItems && item.subItems?.some(sub => pathname === sub.href);
 
             return (
               <li key={item.name}>
-                <Link
-                  href={item.href}
-                  className={cn(
-                    "flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors group",
-                    "hover:bg-raised",
-                    isActive
-                      ? "bg-primary/10 text-primary border border-primary/20"
-                      : "text-ink-mid hover:text-ink-hi"
-                  )}
-                >
-                  <NavIcon
-                    src={item.icon}
-                    alt={item.name}
-                    isActive={isActive}
-                  />
-                  <span className="font-ui text-sm">{item.name}</span>
-                </Link>
+                {hasSubItems ? (
+                  <>
+                    <button
+                      onClick={() => toggleExpand(item.name)}
+                      className={cn(
+                        "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors group",
+                        "hover:bg-raised",
+                        isSubItemActive
+                          ? "bg-primary/10 text-primary border border-primary/20"
+                          : "text-ink-mid hover:text-ink-hi"
+                      )}
+                    >
+                      <div className="flex items-center">
+                        <NavIcon
+                          src={item.icon}
+                          alt={item.name}
+                          isActive={isSubItemActive}
+                        />
+                        <span className="font-ui text-sm">{item.name}</span>
+                      </div>
+                      <svg
+                        className={cn(
+                          "w-4 h-4 transition-transform",
+                          isExpanded && "rotate-90"
+                        )}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                    </button>
+                    {isExpanded && (
+                      <ul className="mt-1 ml-8 space-y-1">
+                        {item.subItems?.map((subItem) => {
+                          const isSubActive = pathname === subItem.href;
+                          return (
+                            <li key={subItem.name}>
+                              <Link
+                                href={subItem.href}
+                                className={cn(
+                                  "block px-3 py-2 rounded-lg text-sm transition-colors",
+                                  "hover:bg-raised",
+                                  isSubActive
+                                    ? "bg-primary/5 text-primary font-medium"
+                                    : "text-ink-mid hover:text-ink-hi"
+                                )}
+                              >
+                                {subItem.name}
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </>
+                ) : (
+                  <Link
+                    href={item.href}
+                    className={cn(
+                      "flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors group",
+                      "hover:bg-raised",
+                      isActive
+                        ? "bg-primary/10 text-primary border border-primary/20"
+                        : "text-ink-mid hover:text-ink-hi"
+                    )}
+                  >
+                    <NavIcon
+                      src={item.icon}
+                      alt={item.name}
+                      isActive={isActive}
+                    />
+                    <span className="font-ui text-sm">{item.name}</span>
+                  </Link>
+                )}
               </li>
             );
           })}

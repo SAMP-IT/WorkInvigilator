@@ -3,10 +3,12 @@ const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const activeWin = require('active-win');
 
 let mainWindow;
 let tray;
 let supabaseClient;
+let activityTrackingInterval = null;
 
 // Supabase configuration
 const SUPABASE_CONFIG = {
@@ -52,7 +54,7 @@ function createWindow() {
     minHeight: 550,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
+      contextIsolation: false, // Disabled to allow require() in renderer for WebRTC modules
       nodeIntegration: true,
       enableRemoteModule: false
     },
@@ -467,4 +469,137 @@ ipcMain.handle('app-cleanup-complete', async () => {
   return { success: true };
 });
 
+// Activity tracking handlers
+
+// Get current active window information
+ipcMain.handle('get-active-window', async () => {
+  try {
+    const result = await activeWin();
+
+    if (!result) {
+      return { success: false, error: 'No active window detected' };
+    }
+
+    // Extract relevant information
+    const windowInfo = {
+      appName: result.owner.name || 'Unknown',
+      windowTitle: result.title || '',
+      processPath: result.owner.path || '',
+      platform: result.platform || process.platform
+    };
+
+    // Extract URL from browser windows
+    let url = null;
+    let domain = null;
+
+    // Check if it's a browser and try to extract URL from window title
+    const browserApps = [
+      'Google Chrome', 'Chrome', 'chrome.exe',
+      'Mozilla Firefox', 'Firefox', 'firefox.exe',
+      'Microsoft Edge', 'Edge', 'msedge.exe',
+      'Safari',
+      'Opera', 'opera.exe',
+      'Brave', 'brave.exe'
+    ];
+
+    const isBrowser = browserApps.some(browser =>
+      windowInfo.appName.toLowerCase().includes(browser.toLowerCase())
+    );
+
+    if (isBrowser && windowInfo.windowTitle) {
+      // Try to extract URL from common browser title patterns
+      // Most browsers show: "Page Title - URL" or "Page Title"
+      const urlMatch = windowInfo.windowTitle.match(/(https?:\/\/[^\s]+)/i);
+      if (urlMatch) {
+        url = urlMatch[1];
+        try {
+          const urlObj = new URL(url);
+          domain = urlObj.hostname;
+        } catch (e) {
+          // Invalid URL, ignore
+        }
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        ...windowInfo,
+        url,
+        domain,
+        isBrowser,
+        timestamp: new Date().toISOString()
+      }
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Start activity tracking
+ipcMain.handle('start-activity-tracking', async (event, intervalMs = 10000) => {
+  try {
+    // Clear any existing interval
+    if (activityTrackingInterval) {
+      clearInterval(activityTrackingInterval);
+    }
+
+    // Start tracking at specified interval (default 10 seconds)
+    activityTrackingInterval = setInterval(async () => {
+      try {
+        const result = await activeWin();
+        if (result) {
+          // Send active window data to renderer
+          mainWindow.webContents.send('active-window-changed', {
+            appName: result.owner.name || 'Unknown',
+            windowTitle: result.title || '',
+            processPath: result.owner.path || '',
+            timestamp: new Date().toISOString()
+          });
+        }
+      } catch (error) {
+        // Ignore errors during periodic checks
+      }
+    }, intervalMs);
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Stop activity tracking
+ipcMain.handle('stop-activity-tracking', async () => {
+  try {
+    if (activityTrackingInterval) {
+      clearInterval(activityTrackingInterval);
+      activityTrackingInterval = null;
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Live streaming - Get screen sources for WebRTC
+ipcMain.handle('get-screen-sources', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 1920, height: 1080 }
+    });
+
+    // Return sources with minimal data (just what's needed for WebRTC)
+    return {
+      success: true,
+      sources: sources.map(source => ({
+        id: source.id,
+        name: source.name,
+        display_id: source.display_id
+      }))
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
 

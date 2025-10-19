@@ -435,12 +435,10 @@ function AudioPageContent() {
               </div>
             ) : selectedEmployee !== 'all' ? (
               <div className="text-center py-8 text-ink-muted">
-                <div className="text-4xl mb-4">🎤</div>
                 <p className="text-sm">No audio recordings found for this employee</p>
               </div>
             ) : (
               <div className="text-center py-8 text-ink-muted">
-                <div className="text-4xl mb-4">🎵</div>
                 <p className="text-sm">No recordings found.</p>
               </div>
             )}

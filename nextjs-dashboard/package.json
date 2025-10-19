@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node server.js",
     "build": "next build",
     "pages:build": "npx @cloudflare/next-on-pages",
-    "start": "next start",
+    "start": "NODE_ENV=production node server.js",
     "lint": "eslint",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -19,9 +19,14 @@
     "@supabase/auth-ui-shared": "^0.1.8",
     "@supabase/supabase-js": "^2.57.4",
     "clsx": "^2.1.1",
+    "mediasoup": "^3.19.4",
     "next": "15.5.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "recharts": "^3.2.1",
+    "simple-peer": "^9.11.1",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
@@ -40,6 +45,7 @@
     "jest": "^30.2.0",
     "jest-environment-jsdom": "^30.2.0",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "typescript": "^5"
   }
 }

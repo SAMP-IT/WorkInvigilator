@@ -398,17 +398,16 @@ export default function MuteEventsPage() {
                               {/* Timeline */}
                               <div>
                                 <h3 className="text-sm font-semibold text-ink-hi mb-4 flex items-center space-x-2">
-                                  <span>📅</span>
                                   <span>Event Timeline</span>
                                 </h3>
                                 <div className="space-y-3">
                                   {details.timeline.map((item: any, idx: number) => (
                                     <div key={idx} className="flex items-start space-x-3">
                                       <div className="flex-shrink-0 mt-1">
-                                        {item.type === 'session_start' && <span className="text-success text-lg">▶️</span>}
-                                        {item.type === 'mute_detected' && <span className="text-danger text-lg">🔇</span>}
-                                        {item.type === 'mute_ended' && <span className="text-success text-lg">🔊</span>}
-                                        {item.type === 'session_end' && <span className="text-success text-lg">⏹️</span>}
+                                        {item.type === 'session_start' && <span className="text-success text-lg">START</span>}
+                                        {item.type === 'mute_detected' && <span className="text-danger text-lg">MUTE</span>}
+                                        {item.type === 'mute_ended' && <span className="text-success text-lg">UNMUTE</span>}
+                                        {item.type === 'session_end' && <span className="text-success text-lg">END</span>}
                                       </div>
                                       <div className="flex-1">
                                         <div className="flex items-center space-x-2">
@@ -430,7 +429,6 @@ export default function MuteEventsPage() {
                               {details.audioChunks && details.audioChunks.length > 0 && (
                                 <div>
                                   <h3 className="text-sm font-semibold text-ink-hi mb-4 flex items-center space-x-2">
-                                    <span>🎙️</span>
                                     <span>Audio Recording Details</span>
                                   </h3>
                                   <div className="space-y-2">

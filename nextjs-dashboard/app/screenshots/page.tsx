@@ -342,7 +342,6 @@ export default function ScreenshotsPage() {
                           target.style.display = 'none';
                           target.parentElement!.innerHTML = `
                             <div class="text-center">
-                              <div class="text-2xl mb-1">📸</div>
                               <div class="text-xs text-ink-muted">${screenshot.application || 'Screenshot'}</div>
                             </div>
                           `;
@@ -350,7 +349,6 @@ export default function ScreenshotsPage() {
                       />
                     ) : (
                       <div className="text-center">
-                        <div className="text-2xl mb-1">📸</div>
                         <div className="text-xs text-ink-muted">{screenshot.application || 'No preview'}</div>
                       </div>
                     )}
@@ -461,7 +459,7 @@ export default function ScreenshotsPage() {
                     size="sm"
                     onClick={() => setSelectedScreenshot(null)}
                   >
-                    ✕
+                    Close
                   </Button>
                 </div>
                 <div className="p-4">
@@ -476,7 +474,6 @@ export default function ScreenshotsPage() {
                         />
                       ) : (
                         <div className="text-center">
-                          <div className="text-6xl mb-4">📸</div>
                           <div className="text-ink-muted">Screenshot Preview</div>
                           <div className="text-sm text-ink-muted mt-2">
                             {screenshot?.timestamp}

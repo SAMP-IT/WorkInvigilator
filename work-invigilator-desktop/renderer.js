@@ -28,6 +28,10 @@ class WorkInvigilatorApp {
     this.chunkInterval = null;
     this.isStoppingForChunk = false;
 
+    // Live Streaming
+    this.liveStreamManager = null;
+    this.isLiveStreaming = false;
+
     // Microphone mute detection
     this.audioContext = null;
     this.analyser = null;
@@ -43,10 +47,26 @@ class WorkInvigilatorApp {
     
     // Screenshot
     this.screenshotInterval = null;
-    
+
+    // Activity tracking
+    this.activityTrackingEnabled = true; // Enable by default
+    this.activityBuffer = []; // Buffer to batch activity logs
+    this.ACTIVITY_BUFFER_SIZE = 30; // Send every 30 logs (5 minutes at 10s interval)
+    this.ACTIVITY_SYNC_INTERVAL = 5 * 60 * 1000; // Sync every 5 minutes regardless
+    this.activitySyncInterval = null;
+
+    // Attendance tracking
+    this.currentAttendanceId = null;
+    this.lastActivityTime = null;
+    this.idleCheckInterval = null;
+    this.IDLE_THRESHOLD = 3 * 60 * 1000; // 3 minutes of inactivity = idle (DeskTime standard)
+    this.currentIdlePeriodId = null;
+    this.idleStartTime = null;
+    this.isIdle = false; // Track idle state
+
     // UI Elements
     this.elements = {};
-    
+
     this.init();
   }
   
@@ -465,8 +485,11 @@ class WorkInvigilatorApp {
   
   async startMonitoring() {
     if (this.isMonitoring) return;
-    
+
     try {
+      // Update UI immediately to show "Starting..." state
+      this.updateMonitoringUI(true, 'starting');
+
       this.sessionStartTime = new Date();
 
       const { data: sessionData, error: sessionError } = await this.supabase
@@ -483,59 +506,99 @@ class WorkInvigilatorApp {
         }])
         .select()
         .single();
-      
+
       if (sessionError) {
         throw sessionError;
       }
-      
+
       // Extract session ID (handle both array and object responses)
       const session = Array.isArray(sessionData) ? sessionData[0] : sessionData;
       this.currentSessionId = session?.id;
-      
+
       if (!this.currentSessionId) {
         throw new Error('Failed to get session ID from database');
       }
-      
-      
+
+
       // Start recording
       await this.startRecording();
-      
+
       // Update state
       this.isMonitoring = true;
       this.startSessionTimer();
       this.startScreenshotCapture();
-      
-      // Update UI
-      this.updateMonitoringUI(true);
-      
+
+      // Start activity tracking
+      if (this.activityTrackingEnabled) {
+        await this.startActivityTracking();
+      }
+
+      // Auto clock-in for attendance
+      await this.autoClockIn();
+
+      // Start idle detection
+      this.startIdleDetection();
+
+      // Update UI to active state
+      this.updateMonitoringUI(true, 'active');
+
       // Save state
       await this.saveMonitoringState();
-      
-      
+
+      // Start live streaming in background (non-blocking) - this is slow
+      this.initializeLiveStreamInBackground();
+
     } catch (error) {
       this.showMessage('Failed to start session: ' + error.message, 'error');
+      this.updateMonitoringUI(false);
+    }
+  }
+
+  async initializeLiveStreamInBackground() {
+    // Run live streaming initialization in background without blocking UI
+    try {
+      await this.initializeLiveStream();
+      await this.startLiveStreaming();
+      console.log('✅ Live streaming initialized in background');
+    } catch (error) {
+      console.error('Failed to initialize live streaming (non-critical):', error);
+      // Don't fail the entire session if live streaming fails
     }
   }
   
   async stopMonitoring() {
     if (!this.isMonitoring) return;
-    
+
     try {
+      // Update UI immediately to show "Stopping..." state
+      this.updateMonitoringUI(true, 'stopping');
+
       const sessionEndTime = new Date();
       const sessionDuration = Math.floor((sessionEndTime - this.sessionStartTime) / 1000);
-      
+
       // Stop recording first
       await this.stopRecording();
-      
+
       // Stop timers
       this.stopSessionTimer();
       this.stopScreenshotCapture();
-      
+
+      // Stop activity tracking and sync remaining logs
+      if (this.activityTrackingEnabled) {
+        await this.stopActivityTracking();
+      }
+
+      // Stop idle detection
+      this.stopIdleDetection();
+
+      // Auto clock-out for attendance
+      await this.autoClockOut();
+
       // End any active break
       if (this.isOnBreak) {
         await this.endBreak();
       }
-      
+
       // Update session record in database
       if (this.currentSessionId) {
         const { data: updateData, error: updateError } = await this.supabase
@@ -548,14 +611,14 @@ class WorkInvigilatorApp {
             chunk_files: this.sessionChunks
           })
           .eq('id', this.currentSessionId);
-        
+
         if (updateError) {
           this.showMessage('Warning: Session end time was not saved to database', 'warning');
         } else {
         }
       } else {
       }
-      
+
       // Clear state
       this.isMonitoring = false;
       this.sessionStartTime = null;
@@ -563,16 +626,43 @@ class WorkInvigilatorApp {
       this.sessionChunks = [];
       this.totalWorkTime = 0;
       this.totalBreakTime = 0;
-      
-      // Update UI
+
+      // Update UI to stopped state
       this.updateMonitoringUI(false);
-      
+
       // Save state to storage
       await this.saveMonitoringState();
-      
-      
+
+      // Disconnect from live streaming in background (non-blocking)
+      this.disconnectLiveStreamingInBackground();
+
     } catch (error) {
       this.showMessage('Error stopping session: ' + error.message, 'error');
+      this.updateMonitoringUI(false);
+    }
+  }
+
+  async stopLiveStreamingInBackground() {
+    // Run live streaming cleanup in background without blocking UI
+    try {
+      await this.stopLiveStreaming();
+      console.log('✅ Live streaming stopped in background');
+    } catch (error) {
+      console.error('Failed to stop live streaming (non-critical):', error);
+    }
+  }
+
+  async disconnectLiveStreamingInBackground() {
+    // Run live streaming disconnect in background without blocking UI
+    try {
+      if (this.liveStreamManager) {
+        await this.liveStreamManager.disconnect();
+        this.liveStreamManager = null;
+        this.isLiveStreaming = false;
+        console.log('🔌 Disconnected from Supabase Realtime');
+      }
+    } catch (error) {
+      console.error('Failed to disconnect live streaming (non-critical):', error);
     }
   }
   
@@ -978,10 +1068,9 @@ class WorkInvigilatorApp {
       const userEmail = this.currentUser.email || this.currentUser.id;
       const filename = `${userEmail}/${date}/${time}_chunk_${chunkNumber}.webm`;
 
-      let primaryUrl = null;
-      let backupUrl = null;
+      let fileUrl = null;
 
-      // Try Backblaze first (if enabled)
+      // Upload to Backblaze only
       if (this.backblazeEnabled) {
         try {
           const { data: backblazeData, error: backblazeError } = await window.electronAPI.backblazeStorage('upload', {
@@ -991,65 +1080,31 @@ class WorkInvigilatorApp {
           });
 
           if (!backblazeError && backblazeData) {
-            primaryUrl = backblazeData.publicUrl;
+            fileUrl = backblazeData.publicUrl;
+            console.log('✅ Audio chunk uploaded to Backblaze');
+          } else {
+            console.error('Failed to upload audio chunk to Backblaze:', backblazeError);
+            return;
           }
         } catch (error) {
-          // Backblaze upload failed, will use Supabase
-        }
-      }
-
-      // Always upload to Supabase (as backup or primary)
-      let uploadData, uploadError;
-
-      try {
-        const uploadResult = await this.supabase.storage
-          .from('audio-recordings')
-          .upload(filename, arrayBuffer);
-        uploadData = uploadResult.data;
-        uploadError = uploadResult.error;
-      } catch (error) {
-        uploadError = error;
-      }
-
-      // If token expired, refresh and retry once
-      if (uploadError && (uploadError.message?.includes('exp') || uploadError.message?.includes('token'))) {
-        await this.refreshAuthToken();
-
-        const retryResult = await this.supabase.storage
-          .from('audio-recordings')
-          .upload(filename, arrayBuffer);
-        uploadData = retryResult.data;
-        uploadError = retryResult.error;
-      }
-
-      if (uploadError) {
-        // If both failed, return
-        if (!primaryUrl) {
+          console.error('Error uploading audio chunk:', error);
           return;
         }
       } else {
-        const urlData = await this.supabase.storage
-          .from('audio-recordings')
-          .getPublicUrl(filename);
-
-        backupUrl = urlData.publicUrl;
-
-        if (!primaryUrl) {
-          // If Backblaze failed/disabled, use Supabase as primary
-          primaryUrl = backupUrl;
-        }
+        console.warn('⚠️ Backblaze is not enabled. Audio chunk not saved.');
+        return;
       }
 
-      // Save to database with primary URL and backup URL
+      // Save to database
       const dbRecord = {
         user_id: this.currentUser.id,
         organization_id: this.organizationId,
         session_start_time: this.sessionStartTime ? this.sessionStartTime.toISOString() : new Date().toISOString(),
         chunk_number: chunkNumber,
         filename: filename,
-        file_url: primaryUrl,
-        backup_file_url: backupUrl,
-        storage_provider: this.backblazeEnabled ? 'backblaze' : 'supabase',
+        file_url: fileUrl,
+        backup_file_url: null,
+        storage_provider: 'backblaze',
         duration_seconds: chunkDuration,
         chunk_start_time: new Date(this.currentChunkStartTime).toISOString()
       };
@@ -1062,7 +1117,7 @@ class WorkInvigilatorApp {
         this.sessionChunks.push({
           chunk_number: chunkNumber,
           filename: filename,
-          file_url: primaryUrl,
+          file_url: fileUrl,
           duration: chunkDuration
         });
       }
@@ -1198,7 +1253,7 @@ class WorkInvigilatorApp {
       if (this.isMonitoring && !this.isOnBreak) {
         await this.captureScreenshot();
       }
-    }, 30000); // Every 30 seconds
+    }, 5 * 60 * 1000); // Every 5 minutes
   }
   
   stopScreenshotCapture() {
@@ -1231,69 +1286,34 @@ class WorkInvigilatorApp {
       const userEmail = this.currentUser.email || this.currentUser.id;
       const filename = `${userEmail}/${date}/${time}_screenshot.png`;
 
-      let primaryUrl = null;
-      let backupUrl = null;
+      let fileUrl = null;
 
-      // Try Backblaze first (if enabled)
+      // Upload to Backblaze only
       if (this.backblazeEnabled) {
         try {
-          const { data: backblazeData, error: backblazeError } = await window.electronAPI.backblazeStorage('upload', {
+          const { data: backblazeData, error: backblazeError} = await window.electronAPI.backblazeStorage('upload', {
             bucket: 'screenshots',
             path: filename,
             file: arrayBuffer
           });
 
           if (!backblazeError && backblazeData) {
-            primaryUrl = backblazeData.publicUrl;
+            fileUrl = backblazeData.publicUrl;
+            console.log('✅ Screenshot uploaded to Backblaze');
           } else {
+            console.error('Failed to upload screenshot to Backblaze:', backblazeError);
+            return;
           }
         } catch (error) {
-        }
-      }
-
-      // Always upload to Supabase (as backup or primary)
-      let uploadData, uploadError;
-      
-      try {
-        const uploadResult = await this.supabase.storage
-          .from('screenshots')
-          .upload(filename, arrayBuffer);
-        uploadData = uploadResult.data;
-        uploadError = uploadResult.error;
-      } catch (error) {
-        uploadError = error;
-      }
-
-      // If token expired, refresh and retry once
-      if (uploadError && (uploadError.message?.includes('exp') || uploadError.message?.includes('token'))) {
-        await this.refreshAuthToken();
-        
-        const retryResult = await this.supabase.storage
-          .from('screenshots')
-          .upload(filename, arrayBuffer);
-        uploadData = retryResult.data;
-        uploadError = retryResult.error;
-      }
-
-      if (uploadError) {
-        // If both failed, return
-        if (!primaryUrl) {
+          console.error('Error uploading screenshot:', error);
           return;
         }
       } else {
-        const urlData = await this.supabase.storage
-          .from('screenshots')
-          .getPublicUrl(filename);
-
-        backupUrl = urlData.publicUrl;
-
-        if (!primaryUrl) {
-          // If Backblaze failed/disabled, use Supabase as primary
-          primaryUrl = backupUrl;
-        }
+        console.warn('⚠️ Backblaze is not enabled. Screenshot not saved.');
+        return;
       }
 
-      // Save to database with primary URL and backup URL
+      // Save to database
       await this.supabase
         .from('screenshots')
         .insert([{
@@ -1301,9 +1321,9 @@ class WorkInvigilatorApp {
           organization_id: this.organizationId,
           session_id: this.currentSessionId,
           filename: filename,
-          file_url: primaryUrl,
-          backup_file_url: backupUrl,
-          storage_provider: this.backblazeEnabled ? 'backblaze' : 'supabase'
+          file_url: fileUrl,
+          backup_file_url: null,
+          storage_provider: 'backblaze'
         }]);
 
     } catch (error) {
@@ -1339,24 +1359,49 @@ class WorkInvigilatorApp {
     }
   }
   
-  updateMonitoringUI(isMonitoring) {
+  updateMonitoringUI(isMonitoring, state = 'active') {
+    // state can be: 'starting', 'stopping', 'active', or null/undefined for off state
+
     // Toggle button
     if (this.elements.mainToggleBtn) {
-      this.elements.mainToggleBtn.className = isMonitoring ? 'toggle-btn toggle-on' : 'toggle-btn toggle-off';
+      if (state === 'starting' || state === 'stopping') {
+        this.elements.mainToggleBtn.className = state === 'starting' ? 'toggle-btn toggle-on' : 'toggle-btn toggle-off';
+        this.elements.mainToggleBtn.disabled = true; // Disable during startup/shutdown
+      } else {
+        this.elements.mainToggleBtn.className = isMonitoring ? 'toggle-btn toggle-on' : 'toggle-btn toggle-off';
+        this.elements.mainToggleBtn.disabled = false;
+      }
     }
+
     if (this.elements.toggleIcon) {
-      this.elements.toggleIcon.textContent = isMonitoring ? '🟢' : '🔴';
+      if (state === 'starting' || state === 'stopping') {
+        this.elements.toggleIcon.textContent = '⏳';
+      } else {
+        this.elements.toggleIcon.textContent = isMonitoring ? '🟢' : '🔴';
+      }
     }
+
     if (this.elements.toggleStatus) {
-      this.elements.toggleStatus.textContent = isMonitoring ? 'Work Invigilator ON' : 'Work Invigilator OFF';
+      if (state === 'starting') {
+        this.elements.toggleStatus.textContent = 'Starting...';
+      } else if (state === 'stopping') {
+        this.elements.toggleStatus.textContent = 'Stopping...';
+      } else {
+        this.elements.toggleStatus.textContent = isMonitoring ? 'Work Invigilator ON' : 'Work Invigilator OFF';
+      }
     }
+
     if (this.elements.toggleSubtitle) {
-      this.elements.toggleSubtitle.textContent = isMonitoring ? 'Click to end session' : 'Click to start session';
+      if (state === 'starting' || state === 'stopping') {
+        this.elements.toggleSubtitle.textContent = 'Please wait...';
+      } else {
+        this.elements.toggleSubtitle.textContent = isMonitoring ? 'Click to end session' : 'Click to start session';
+      }
     }
-    
+
     // Monitoring panel
     if (this.elements.monitoringStatus) {
-      if (isMonitoring) {
+      if (isMonitoring || state === 'starting' || state === 'stopping') {
         this.elements.monitoringStatus.classList.remove('hidden');
       } else {
         this.elements.monitoringStatus.classList.add('hidden');
@@ -1393,13 +1438,459 @@ class WorkInvigilatorApp {
   openAdminDashboard() {
     window.electronAPI.openExternal('http://localhost:3002/login');
   }
-  
+
+  async startActivityTracking() {
+    try {
+      // Start periodic activity tracking (every 10 seconds)
+      await window.electronAPI.startActivityTracking(10000);
+
+      // Listen for activity changes
+      window.electronAPI.onActiveWindowChanged(async (windowData) => {
+        if (this.isMonitoring && !this.isOnBreak) {
+          await this.logActivity(windowData);
+        }
+      });
+
+      // Periodic sync timer
+      this.activitySyncInterval = setInterval(async () => {
+        await this.syncActivityLogs();
+      }, this.ACTIVITY_SYNC_INTERVAL);
+
+    } catch (error) {
+      console.error('Failed to start activity tracking:', error);
+    }
+  }
+
+  async stopActivityTracking() {
+    try {
+      // Stop tracking
+      await window.electronAPI.stopActivityTracking();
+
+      // Clear sync interval
+      if (this.activitySyncInterval) {
+        clearInterval(this.activitySyncInterval);
+        this.activitySyncInterval = null;
+      }
+
+      // Sync remaining buffered logs
+      await this.syncActivityLogs();
+
+    } catch (error) {
+      console.error('Failed to stop activity tracking:', error);
+    }
+  }
+
+  async logActivity(windowData) {
+    // Get the active window with URL extraction
+    const result = await window.electronAPI.getActiveWindow();
+
+    if (result.success && result.data) {
+      const activity = {
+        appName: result.data.appName,
+        windowTitle: result.data.windowTitle,
+        url: result.data.url,
+        domain: result.data.domain,
+        timestamp: result.data.timestamp
+      };
+
+      // Add to buffer
+      this.activityBuffer.push(activity);
+
+      // Update last activity time for idle detection
+      this.lastActivityTime = Date.now();
+
+      // If was idle, end idle period
+      if (this.currentIdlePeriodId) {
+        await this.endIdlePeriod();
+      }
+
+      // Sync if buffer is full
+      if (this.activityBuffer.length >= this.ACTIVITY_BUFFER_SIZE) {
+        await this.syncActivityLogs();
+      }
+    }
+  }
+
+  async syncActivityLogs() {
+    if (this.activityBuffer.length === 0) {
+      return;
+    }
+
+    try {
+      // Get access token
+      const tokenResult = await window.electronAPI.storeGet('accessToken');
+      if (!tokenResult.success || !tokenResult.value) {
+        console.error('No access token available for activity sync');
+        return;
+      }
+
+      const accessToken = tokenResult.value;
+
+      // Send to API
+      const response = await fetch('http://localhost:3002/api/activity-logs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          activities: this.activityBuffer,
+          sessionId: this.currentSessionId
+        })
+      });
+
+      if (response.ok) {
+        // Clear buffer on success
+        this.activityBuffer = [];
+      } else {
+        const error = await response.json();
+        console.error('Failed to sync activity logs:', error);
+
+        // If auth error, try to refresh token
+        if (response.status === 401) {
+          await this.refreshAuthToken();
+        }
+      }
+
+    } catch (error) {
+      console.error('Error syncing activity logs:', error);
+      // Keep logs in buffer for next sync attempt
+    }
+  }
+
+  // Attendance tracking methods
+
+  async autoClockIn() {
+    try {
+      const tokenResult = await window.electronAPI.storeGet('accessToken');
+      if (!tokenResult.success || !tokenResult.value) {
+        return;
+      }
+
+      const now = new Date();
+      const date = now.toISOString().split('T')[0];
+
+      // Call attendance API to clock in
+      const response = await fetch('http://localhost:3002/api/attendance/clock-in', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokenResult.value}`
+        },
+        body: JSON.stringify({
+          clockInTime: now.toISOString(),
+          date: date
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        this.currentAttendanceId = data.attendanceId;
+        this.lastActivityTime = Date.now();
+        console.log('Auto clocked in successfully');
+      }
+    } catch (error) {
+      console.error('Failed to auto clock-in:', error);
+    }
+  }
+
+  async autoClockOut() {
+    try {
+      if (!this.currentAttendanceId) {
+        return;
+      }
+
+      const tokenResult = await window.electronAPI.storeGet('accessToken');
+      if (!tokenResult.success || !tokenResult.value) {
+        return;
+      }
+
+      // End any active idle period first
+      if (this.currentIdlePeriodId) {
+        await this.endIdlePeriod();
+      }
+
+      const now = new Date();
+
+      // Call attendance API to clock out
+      const response = await fetch('http://localhost:3002/api/attendance/clock-out', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokenResult.value}`
+        },
+        body: JSON.stringify({
+          attendanceId: this.currentAttendanceId,
+          clockOutTime: now.toISOString()
+        })
+      });
+
+      if (response.ok) {
+        console.log('Auto clocked out successfully');
+        this.currentAttendanceId = null;
+      }
+    } catch (error) {
+      console.error('Failed to auto clock-out:', error);
+    }
+  }
+
+  startIdleDetection() {
+    // Update last activity time on user interaction
+    this.lastActivityTime = Date.now();
+
+    // Add mouse and keyboard event listeners to detect user activity
+    this.setupActivityListeners();
+
+    // Check for idle every 15 seconds (more frequent for better accuracy)
+    this.idleCheckInterval = setInterval(() => {
+      this.checkIdleStatus();
+    }, 15000);
+  }
+
+  setupActivityListeners() {
+    // Track mouse movement
+    const updateActivity = () => {
+      const wasIdle = this.isIdle;
+      this.lastActivityTime = Date.now();
+
+      // If was idle, mark as active
+      if (wasIdle && this.currentIdlePeriodId) {
+        this.endIdlePeriod();
+      }
+    };
+
+    // Mouse events
+    document.addEventListener('mousemove', updateActivity);
+    document.addEventListener('mousedown', updateActivity);
+    document.addEventListener('mouseup', updateActivity);
+    document.addEventListener('click', updateActivity);
+    document.addEventListener('wheel', updateActivity);
+
+    // Keyboard events
+    document.addEventListener('keydown', updateActivity);
+    document.addEventListener('keypress', updateActivity);
+    document.addEventListener('keyup', updateActivity);
+
+    // Touch events for touchscreen support
+    document.addEventListener('touchstart', updateActivity);
+    document.addEventListener('touchmove', updateActivity);
+    document.addEventListener('touchend', updateActivity);
+
+    // Store event listener reference for cleanup
+    this.activityEventListener = updateActivity;
+  }
+
+  removeActivityListeners() {
+    if (!this.activityEventListener) return;
+
+    document.removeEventListener('mousemove', this.activityEventListener);
+    document.removeEventListener('mousedown', this.activityEventListener);
+    document.removeEventListener('mouseup', this.activityEventListener);
+    document.removeEventListener('click', this.activityEventListener);
+    document.removeEventListener('wheel', this.activityEventListener);
+    document.removeEventListener('keydown', this.activityEventListener);
+    document.removeEventListener('keypress', this.activityEventListener);
+    document.removeEventListener('keyup', this.activityEventListener);
+    document.removeEventListener('touchstart', this.activityEventListener);
+    document.removeEventListener('touchmove', this.activityEventListener);
+    document.removeEventListener('touchend', this.activityEventListener);
+
+    this.activityEventListener = null;
+  }
+
+  stopIdleDetection() {
+    // Clear idle check interval
+    if (this.idleCheckInterval) {
+      clearInterval(this.idleCheckInterval);
+      this.idleCheckInterval = null;
+    }
+
+    // Remove activity event listeners
+    this.removeActivityListeners();
+  }
+
+  async checkIdleStatus() {
+    if (!this.isMonitoring) return;
+
+    const now = Date.now();
+    const timeSinceActivity = now - (this.lastActivityTime || now);
+
+    // If idle for more than threshold and not already in idle state
+    if (timeSinceActivity > this.IDLE_THRESHOLD && !this.currentIdlePeriodId) {
+      this.isIdle = true;
+      await this.startIdlePeriod();
+      this.updateIdleStatusUI(true);
+      console.log(`Idle detected: No activity for ${Math.floor(timeSinceActivity / 1000)}s (threshold: ${this.IDLE_THRESHOLD / 1000}s)`);
+    }
+    // If was idle but now active again
+    else if (timeSinceActivity < this.IDLE_THRESHOLD && this.currentIdlePeriodId) {
+      this.isIdle = false;
+      await this.endIdlePeriod();
+      this.updateIdleStatusUI(false);
+      console.log('Activity resumed - idle period ended');
+    }
+  }
+
+  async startIdlePeriod() {
+    try {
+      const tokenResult = await window.electronAPI.storeGet('accessToken');
+      if (!tokenResult.success || !tokenResult.value) {
+        return;
+      }
+
+      this.idleStartTime = new Date();
+
+      // Call API to start idle period
+      const response = await fetch('http://localhost:3002/api/attendance/start-idle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokenResult.value}`
+        },
+        body: JSON.stringify({
+          attendanceId: this.currentAttendanceId,
+          idleStartTime: this.idleStartTime.toISOString()
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        this.currentIdlePeriodId = data.idlePeriodId;
+        console.log('Idle period started');
+      }
+    } catch (error) {
+      console.error('Failed to start idle period:', error);
+    }
+  }
+
+  async endIdlePeriod() {
+    try {
+      if (!this.currentIdlePeriodId) {
+        return;
+      }
+
+      const tokenResult = await window.electronAPI.storeGet('accessToken');
+      if (!tokenResult.success || !tokenResult.value) {
+        return;
+      }
+
+      const now = new Date();
+
+      // Call API to end idle period
+      const response = await fetch('http://localhost:3002/api/attendance/end-idle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokenResult.value}`
+        },
+        body: JSON.stringify({
+          idlePeriodId: this.currentIdlePeriodId,
+          idleEndTime: now.toISOString()
+        })
+      });
+
+      if (response.ok) {
+        console.log('Idle period ended');
+        this.currentIdlePeriodId = null;
+        this.idleStartTime = null;
+        this.lastActivityTime = Date.now();
+      }
+    } catch (error) {
+      console.error('Failed to end idle period:', error);
+    }
+  }
+
+  updateIdleStatusUI(isIdle) {
+    // Update status text
+    if (this.elements.statusText) {
+      if (isIdle) {
+        this.elements.statusText.textContent = '⏸️ IDLE - Timer Paused';
+        this.elements.statusText.style.color = '#f59e0b'; // Amber color
+      } else {
+        this.elements.statusText.textContent = '🟢 ACTIVE - Recording';
+        this.elements.statusText.style.color = '#10b981'; // Green color
+      }
+    }
+
+    // Update session indicator
+    if (this.elements.sessionIndicator) {
+      if (isIdle) {
+        this.elements.sessionIndicator.style.backgroundColor = '#f59e0b';
+        this.elements.sessionIndicator.title = 'Idle - No keyboard or mouse activity detected';
+      } else {
+        this.elements.sessionIndicator.style.backgroundColor = '#10b981';
+        this.elements.sessionIndicator.title = 'Active - Recording work session';
+      }
+    }
+  }
+
+  // Live Streaming Methods (runs directly in renderer process)
+
+  async initializeLiveStream() {
+    if (!this.liveStreamManager && this.currentUser && this.organizationId) {
+      try {
+        // Use global LiveStreamManager class (loaded via script tag in index.html)
+        if (typeof window.LiveStreamManager === 'undefined') {
+          throw new Error('LiveStreamManager not loaded. Ensure livestream-supabase.js is loaded before renderer.js');
+        }
+        this.liveStreamManager = new window.LiveStreamManager();
+
+        // Get Supabase config for live streaming
+        const supabaseConfig = await window.electronAPI.getSupabaseConfig();
+
+        const result = await this.liveStreamManager.initialize(
+          this.currentUser,
+          this.organizationId,
+          supabaseConfig.url,
+          supabaseConfig.anon_key
+        );
+
+        if (result.success) {
+          console.log('✅ Live stream manager initialized with Supabase Realtime');
+        } else {
+          console.error('Failed to initialize live stream:', result.error);
+        }
+      } catch (error) {
+        console.error('Failed to initialize live stream manager:', error);
+      }
+    }
+  }
+
+  async startLiveStreaming() {
+    if (!this.isLiveStreaming && this.liveStreamManager) {
+      try {
+        const result = await this.liveStreamManager.startStreaming();
+
+        if (result.success) {
+          this.isLiveStreaming = true;
+          console.log('✅ Live streaming started');
+        } else {
+          console.error('Failed to start live streaming:', result.error);
+        }
+      } catch (error) {
+        console.error('Error starting live streaming:', error);
+      }
+    }
+  }
+
+  async stopLiveStreaming() {
+    if (this.isLiveStreaming && this.liveStreamManager) {
+      try {
+        this.liveStreamManager.stopStreaming();
+        this.isLiveStreaming = false;
+        console.log('🛑 Live streaming stopped');
+      } catch (error) {
+        console.error('Error stopping live streaming:', error);
+      }
+    }
+  }
+
   formatTime(milliseconds) {
     const totalSeconds = Math.floor(milliseconds / 1000);
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-    
+
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   }
 }

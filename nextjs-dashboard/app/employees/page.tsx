@@ -37,6 +37,7 @@ interface Employee {
   createdAt: string;
   shiftStartTime?: string;
   shiftEndTime?: string;
+  hourlyRate?: number;
 }
 
 interface Screenshot {
@@ -48,7 +49,7 @@ interface Screenshot {
 function EmployeesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +63,10 @@ function EmployeesPageContent() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [employeeScreenshots, setEmployeeScreenshots] = useState<Screenshot[]>([]);
+  const [showHourlyRateModal, setShowHourlyRateModal] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [newHourlyRate, setNewHourlyRate] = useState<string>("");
+  const [isSavingRate, setIsSavingRate] = useState(false);
 
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
@@ -82,8 +87,14 @@ function EmployeesPageContent() {
   const uniqueRoles = Array.from(new Set(employees.map((emp) => emp.role)));
 
   useEffect(() => {
-    loadEmployees();
-  }, []);
+    // Wait for auth to finish loading before fetching employees
+    if (!authLoading && profile?.organization_id) {
+      loadEmployees();
+    } else if (!authLoading && !profile?.organization_id) {
+      setError("No organization found");
+      setLoading(false);
+    }
+  }, [authLoading, profile?.organization_id]);
 
   const loadEmployees = async () => {
     try {
@@ -157,6 +168,7 @@ function EmployeesPageContent() {
       "Role",
       "Avg Break (h)",
       "Avg Session (min)",
+      "Hourly Rate ($)",
       "Last Active",
       "Status",
     ];
@@ -170,6 +182,7 @@ function EmployeesPageContent() {
           `"${emp.role}"`,
           emp.avgBreakHDay.toFixed(1),
           emp.avgSessionMin,
+          (emp.hourlyRate || 0).toFixed(2),
           `"${emp.lastActive}"`,
           emp.status,
         ].join(",")
@@ -187,6 +200,57 @@ function EmployeesPageContent() {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
+  };
+
+  const handleEditHourlyRate = (employee: Employee) => {
+    setEditingEmployee(employee);
+    setNewHourlyRate(employee.hourlyRate?.toString() || "0");
+    setShowHourlyRateModal(true);
+  };
+
+  const handleSaveHourlyRate = async () => {
+    if (!editingEmployee || !profile?.organization_id) return;
+
+    try {
+      setIsSavingRate(true);
+      setError(null);
+
+      const response = await fetch("/api/employees/update-hourly-rate", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          employeeId: editingEmployee.id,
+          hourlyRate: parseFloat(newHourlyRate) || 0,
+          organizationId: profile.organization_id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update hourly rate");
+      }
+
+      setSuccessMessage(`Hourly rate updated to $${newHourlyRate}/hr for ${editingEmployee.name}`);
+      setTimeout(() => setSuccessMessage(null), 5000);
+
+      // Update local employee data
+      setEmployees(employees.map(emp =>
+        emp.id === editingEmployee.id
+          ? { ...emp, hourlyRate: parseFloat(newHourlyRate) || 0 }
+          : emp
+      ));
+
+      setShowHourlyRateModal(false);
+      setEditingEmployee(null);
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Failed to update hourly rate"
+      );
+    } finally {
+      setIsSavingRate(false);
+    }
   };
 
   const handleAddEmployee = async (formData: EmployeeFormData) => {
@@ -444,6 +508,7 @@ function EmployeesPageContent() {
                 <TableHead>Role</TableHead>
                 <TableHead sortable>Avg Break</TableHead>
                 <TableHead sortable>Avg Session</TableHead>
+                <TableHead sortable>Hourly Rate</TableHead>
                 <TableHead sortable>Last Active</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -478,6 +543,9 @@ function EmployeesPageContent() {
                       <div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div>
                     </TableCell>
                     <TableCell>
+                      <div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div>
+                    </TableCell>
+                    <TableCell>
                       <div className="h-4 bg-gray-300 rounded w-24 animate-pulse"></div>
                     </TableCell>
                     <TableCell>
@@ -487,7 +555,7 @@ function EmployeesPageContent() {
                 ))
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={9} className="text-center py-8">
                     <div className="text-danger text-sm">{error}</div>
                     <Button
                       variant="outline"
@@ -501,7 +569,7 @@ function EmployeesPageContent() {
                 </TableRow>
               ) : filteredEmployees.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={9} className="text-center py-8">
                     <div className="text-ink-muted">
                       {searchTerm
                         ? "No employees found matching your search."
@@ -560,6 +628,17 @@ function EmployeesPageContent() {
                       </span>
                     </TableCell>
                     <TableCell>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditHourlyRate(employee);
+                        }}
+                        className="cell-num font-mono text-success hover:text-success/80 font-medium cursor-pointer"
+                      >
+                        ${employee.hourlyRate?.toFixed(2) || "0.00"}/hr
+                      </button>
+                    </TableCell>
+                    <TableCell>
                       <span className="cell-num font-mono text-sm text-ink-muted">
                         {employee.lastActive}
                       </span>
@@ -569,8 +648,15 @@ function EmployeesPageContent() {
                         <Button variant="ghost" size="sm">
                           View
                         </Button>
-                        <Button variant="ghost" size="sm">
-                          •••
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditHourlyRate(employee);
+                          }}
+                        >
+                          $ Edit Rate
                         </Button>
                       </div>
                     </TableCell>
@@ -592,7 +678,7 @@ function EmployeesPageContent() {
                   size="sm"
                   onClick={() => setSelectedEmployee(null)}
                 >
-                  ✕
+                  Close
                 </Button>
               </div>
             </CardHeader>
@@ -664,7 +750,7 @@ function EmployeesPageContent() {
                                   const target = e.target as HTMLImageElement;
                                   target.style.display = 'none';
                                   target.parentElement!.classList.add('flex', 'items-center', 'justify-center');
-                                  target.parentElement!.innerHTML = '<span class="text-ink-muted text-xs">📸</span>';
+                                  target.parentElement!.innerHTML = '<span class="text-ink-muted text-xs">No Image</span>';
                                 }}
                               />
                             </div>
@@ -675,7 +761,7 @@ function EmployeesPageContent() {
                               key={i}
                               className="aspect-video bg-raised rounded border border-line flex items-center justify-center"
                             >
-                              <span className="text-ink-muted text-xs">📸</span>
+                              <span className="text-ink-muted text-xs">No Screenshot</span>
                             </div>
                           ))
                         )}
@@ -717,6 +803,93 @@ function EmployeesPageContent() {
             onCancel={() => setShowAddModal(false)}
             loading={isCreating}
           />
+        </Modal>
+
+        {/* Edit Hourly Rate Modal */}
+        <Modal
+          isOpen={showHourlyRateModal}
+          onClose={() => !isSavingRate && setShowHourlyRateModal(false)}
+          title="Edit Hourly Rate"
+        >
+          {editingEmployee && (
+            <div className="space-y-6 p-6">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-ink-hi mb-1">
+                  {editingEmployee.name}
+                </h3>
+                <p className="text-sm text-ink-muted">{editingEmployee.email}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-ink-hi mb-2">
+                  Hourly Rate (USD)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted font-mono">
+                    $
+                  </span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={newHourlyRate}
+                    onChange={(e) => setNewHourlyRate(e.target.value)}
+                    className="pl-7 font-mono text-lg"
+                    placeholder="0.00"
+                    disabled={isSavingRate}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted text-sm">
+                    /hour
+                  </span>
+                </div>
+                <p className="text-xs text-ink-muted mt-2">
+                  This rate will be used for salary calculations in monthly hours tracking
+                </p>
+              </div>
+
+              <div className="bg-raised p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-ink-hi mb-2">Monthly Estimate</h4>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-ink-muted">160 hours (regular):</span>
+                    <span className="font-mono text-ink-hi">
+                      ${(parseFloat(newHourlyRate) * 160).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-ink-muted">20 hours (overtime @ 1.5x):</span>
+                    <span className="font-mono text-ink-hi">
+                      ${(parseFloat(newHourlyRate) * 20 * 1.5).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-line">
+                    <span className="font-medium text-ink-hi">Total (180 hrs):</span>
+                    <span className="font-mono font-semibold text-success">
+                      ${(parseFloat(newHourlyRate) * 160 + parseFloat(newHourlyRate) * 20 * 1.5).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowHourlyRateModal(false)}
+                  disabled={isSavingRate}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveHourlyRate}
+                  disabled={isSavingRate}
+                  className="flex-1"
+                >
+                  {isSavingRate ? "Saving..." : "Save Rate"}
+                </Button>
+              </div>
+            </div>
+          )}
         </Modal>
       </div>
     </DashboardLayout>

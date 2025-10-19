@@ -103,7 +103,7 @@ export function TableHead({
         <span className="font-ui text-xs smallcaps">{children}</span>
         {sortable && (
           <span className="font-mono text-ink-muted">
-            {sorted === 'asc' ? '↑' : sorted === 'desc' ? '↓' : '↕'}
+            {sorted === 'asc' ? '▲' : sorted === 'desc' ? '▼' : '▲▼'}
           </span>
         )}
       </div>

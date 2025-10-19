@@ -34,6 +34,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const limit = parseInt(searchParams.get('limit') || '50', 10)
+    const offset = (page - 1) * limit
 
     if (!organizationId) {
       return NextResponse.json(
@@ -42,23 +45,25 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get all recording sessions for this organization
-    const { data: sessions } = await supabaseAdmin
+    // Get recording sessions for this organization with pagination
+    const { data: sessions, count: totalSessions } = await supabaseAdmin
       .from('recording_sessions')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('organization_id', organizationId)
       .order('session_start_time', { ascending: false })
+      .range(offset, offset + limit - 1)
 
     let formattedSessions
 
     // If no sessions exist, create sessions from screenshots
     if (!sessions || sessions.length === 0) {
-      // Get all screenshots grouped by user and date
+      // Get recent screenshots grouped by user and date (limit to last 1000 for performance)
       const { data: screenshots } = await supabaseAdmin
         .from('screenshots')
         .select('user_id, created_at')
         .eq('organization_id', organizationId)
         .order('created_at', { ascending: false })
+        .limit(1000)
 
       if (!screenshots || screenshots.length === 0) {
         return NextResponse.json({
@@ -240,8 +245,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       sessions: sessionsWithMetrics,
-      totalCount: sessionsWithMetrics.length,
-      activeCount: sessionsWithMetrics.filter(s => s.status === 'active').length
+      totalCount: totalSessions || sessionsWithMetrics.length,
+      activeCount: sessionsWithMetrics.filter(s => s.status === 'active').length,
+      page,
+      limit,
+      totalPages: totalSessions ? Math.ceil(totalSessions / limit) : 1
     })
 
   } catch (error) {
