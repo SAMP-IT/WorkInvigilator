@@ -193,15 +193,17 @@ export class SupabaseRealtimeSignaling {
       from: message.from,
       to: message.to,
       channelState: this.channel.state,
-      channelSubscribed: this.channel.state === 'joined'
+      channelSubscribed: (this.channel.state as string) === 'joined'
     });
 
     // Wait for channel to be fully subscribed
-    if (this.channel.state !== 'joined') {
+    // Use type assertion since TypeScript doesn't recognize 'joined' as a valid state
+    const channelState = this.channel.state as string;
+    if (channelState !== 'joined') {
       console.warn('⚠️ Channel not joined yet, state:', this.channel.state);
       // Wait up to 5 seconds for channel to join
       let waited = 0;
-      while (this.channel.state !== 'joined' && waited < 5000) {
+      while ((this.channel.state as string) !== 'joined' && waited < 5000) {
         await new Promise(resolve => setTimeout(resolve, 100));
         waited += 100;
       }
@@ -407,6 +409,6 @@ export class SupabaseRealtimeSignaling {
    * Check if connected
    */
   isConnected(): boolean {
-    return this.channel !== null && this.channel.state === 'joined';
+    return this.channel !== null && (this.channel.state as string) === 'joined';
   }
 }

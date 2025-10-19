@@ -99,36 +99,37 @@ export default function LiveMonitoringSupabasePage() {
       });
 
       // Auto-pause/resume streams based on break status
-      streamersData.forEach(streamer => {
-        const video = videoRefsMap.current.get(streamer.userId);
-        const cameraVideo = cameraRefsMap.current.get(streamer.userId);
+      // TODO: Implement break status tracking in StreamerInfo
+      // streamersData.forEach(streamer => {
+      //   const video = videoRefsMap.current.get(streamer.userId);
+      //   const cameraVideo = cameraRefsMap.current.get(streamer.userId);
 
-        if (streamer.isOnBreak) {
-          // Pause if on break and not already paused
-          if (!pausedStreams.has(streamer.userId)) {
-            video?.pause();
-            cameraVideo?.pause();
-            setPausedStreams(prev => {
-              const newSet = new Set(prev);
-              newSet.add(streamer.userId);
-              return newSet;
-            });
-            console.log('⏸️ Auto-paused stream (user on break):', streamer.userId);
-          }
-        } else {
-          // Resume if not on break and currently paused
-          if (pausedStreams.has(streamer.userId)) {
-            video?.play().catch(err => console.error('Error resuming video:', err));
-            cameraVideo?.play().catch(err => console.error('Error resuming camera:', err));
-            setPausedStreams(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(streamer.userId);
-              return newSet;
-            });
-            console.log('▶️ Auto-resumed stream (user ended break):', streamer.userId);
-          }
-        }
-      });
+      //   if (streamer.isOnBreak) {
+      //     // Pause if on break and not already paused
+      //     if (!pausedStreams.has(streamer.userId)) {
+      //       video?.pause();
+      //       cameraVideo?.pause();
+      //       setPausedStreams(prev => {
+      //         const newSet = new Set(prev);
+      //         newSet.add(streamer.userId);
+      //         return newSet;
+      //       });
+      //       console.log('⏸️ Auto-paused stream (user on break):', streamer.userId);
+      //     }
+      //   } else {
+      //     // Resume if not on break and currently paused
+      //     if (pausedStreams.has(streamer.userId)) {
+      //       video?.play().catch(err => console.error('Error resuming video:', err));
+      //       cameraVideo?.play().catch(err => console.error('Error resuming camera:', err));
+      //       setPausedStreams(prev => {
+      //         const newSet = new Set(prev);
+      //         newSet.delete(streamer.userId);
+      //         return newSet;
+      //       });
+      //       console.log('▶️ Auto-resumed stream (user ended break):', streamer.userId);
+      //     }
+      //   }
+      // });
     });
 
     // Streamer became available
@@ -986,12 +987,6 @@ export default function LiveMonitoringSupabasePage() {
                         <div className="flex items-center space-x-2 mt-1">
                           <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
                           <span className="text-xs text-gray-300">LIVE</span>
-                          {streamer?.isOnBreak && (
-                            <>
-                              <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
-                              <span className="text-xs text-amber-400 font-semibold">ON BREAK</span>
-                            </>
-                          )}
                         </div>
                       </div>
                       <button
@@ -1208,12 +1203,6 @@ export default function LiveMonitoringSupabasePage() {
                 {streamers.find(s => s.userId === fullscreenUserId)?.userEmail}
               </span>
               <span className="text-gray-400 text-sm">LIVE - Fullscreen</span>
-              {streamers.find(s => s.userId === fullscreenUserId)?.isOnBreak && (
-                <>
-                  <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
-                  <span className="text-amber-400 text-sm font-semibold">ON BREAK</span>
-                </>
-              )}
             </div>
             <button
               onClick={(e) => toggleFullscreen(fullscreenUserId, e)}
