@@ -30,7 +30,7 @@ export class SupabaseRealtimeSignaling {
   private userId: string | null = null;
   private presenceKey: string | null = null; // Store presence key (like socket.id)
   private role: 'streamer' | 'viewer' | null = null;
-  private eventHandlers: Map<string, Function[]> = new Map();
+  private eventHandlers: Map<string, ((...args: any[]) => void)[]> = new Map();
 
   /**
    * Initialize Supabase Realtime connection
@@ -320,7 +320,7 @@ export class SupabaseRealtimeSignaling {
   /**
    * Register event handler
    */
-  on(event: string, handler: Function) {
+  on(event: string, handler: (...args: any[]) => void) {
     if (!this.eventHandlers.has(event)) {
       this.eventHandlers.set(event, []);
     }
@@ -330,7 +330,7 @@ export class SupabaseRealtimeSignaling {
   /**
    * Unregister event handler
    */
-  off(event: string, handler: Function) {
+  off(event: string, handler: (...args: any[]) => void) {
     const handlers = this.eventHandlers.get(event);
     if (handlers) {
       const index = handlers.indexOf(handler);

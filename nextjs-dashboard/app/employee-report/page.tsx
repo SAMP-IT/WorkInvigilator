@@ -79,7 +79,7 @@ export default function EmployeeReportPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string>("");
-  const [reportType, setReportType] = useState<"daily" | "weekly">("weekly");
+  const [reportType, setReportType] = useState<"daily" | "weekly" | "custom">("weekly");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -393,7 +393,7 @@ export default function EmployeeReportPage() {
                 </label>
                 <select
                   value={reportType}
-                  onChange={(e) => setReportType(e.target.value as "daily" | "weekly")}
+                  onChange={(e) => setReportType(e.target.value as "daily" | "weekly" | "custom")}
                   className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="daily">Daily (Today)</option>
@@ -453,7 +453,7 @@ export default function EmployeeReportPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex items-start space-x-4">
-                  <Avatar name={reportData.employee.name} size="lg" />
+                  <Avatar fallback={reportData.employee.name} size="lg" />
                   <div className="flex-1 grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-sm text-ink-muted">Name</div>

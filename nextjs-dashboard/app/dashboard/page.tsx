@@ -348,7 +348,7 @@ export default function DashboardPage() {
                     <TableHead>Status</TableHead>
                     <TableHead>Activity</TableHead>
                     <TableHead>Clock In</TableHead>
-                    <TableHead>Today's Hours</TableHead>
+                    <TableHead>Today&apos;s Hours</TableHead>
                     <TableHead>Idle Time</TableHead>
                     <TableHead>Productivity</TableHead>
                   </TableRow>
@@ -377,7 +377,7 @@ export default function DashboardPage() {
                       <TableRow key={employee.id}>
                         <TableCell>
                           <div className="flex items-center space-x-3">
-                            <Avatar name={employee.name} size="sm" />
+                            <Avatar fallback={employee.name} size="sm" />
                             <div>
                               <div className="font-medium text-ink-hi">
                                 {employee.name}

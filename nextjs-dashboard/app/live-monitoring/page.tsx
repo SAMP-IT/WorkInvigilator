@@ -241,7 +241,7 @@ export default function LiveMonitoringSupabasePage() {
 
     // IMPORTANT: SimplePeer's offerToReceiveVideo only receives ONE video track
     // We need to add transceivers to receive multiple video tracks (screen + camera)
-    // @ts-ignore - Access internal _pc property
+    // @ts-expect-error - Access internal _pc property
     const pc = peer._pc as RTCPeerConnection;
 
     if (pc) {
@@ -261,7 +261,7 @@ export default function LiveMonitoringSupabasePage() {
     // Handle incoming stream - track all video tracks separately
     let screenTrack: MediaStreamTrack | null = null;
     let cameraTrack: MediaStreamTrack | null = null;
-    let trackCount = 0;
+    const trackCount = 0;
     let receivedStream: MediaStream | null = null;
 
     peer.on('stream', (stream: MediaStream) => {

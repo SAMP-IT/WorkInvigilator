@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
       const overtimePay = overtimeHours * hourlyRate * 1.5 // 1.5x for overtime
 
       let deductions = 0
-      let deductionBreakdown: any[] = []
+      const deductionBreakdown: any[] = []
 
       if (includeDeductions) {
         // Deduct idle time (optional)
@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
     })
 
     return NextResponse.json({
-      payrollData: payrollData.sort((a, b) => b.pay.netPay - a.pay.netPay),
+      payrollData: payrollData.sort((a, b) => parseFloat(b.pay.netPay) - parseFloat(a.pay.netPay)),
       totals: {
         ...totals,
         totalRegularHours: totals.totalRegularHours.toFixed(2),

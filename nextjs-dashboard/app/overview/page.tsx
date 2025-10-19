@@ -302,7 +302,7 @@ export default function OverviewPage() {
                       {item.description}
                     </p>
 
-                    {item.stats && (
+                    {'stats' in item && item.stats && (
                       <div className="bg-raised rounded-lg p-2 mb-2">
                         <div className="text-sm font-semibold text-primary">
                           {item.stats}
@@ -310,7 +310,7 @@ export default function OverviewPage() {
                       </div>
                     )}
 
-                    {item.visual && (
+                    {'visual' in item && item.visual && (
                       <div className="bg-raised rounded-lg p-2 mb-2">
                         <div className="text-xs text-ink-mid">
                           🎨 {item.visual}
@@ -318,7 +318,7 @@ export default function OverviewPage() {
                       </div>
                     )}
 
-                    {item.features && (
+                    {'features' in item && item.features && (
                       <div className="space-y-1">
                         {item.features.map((feature, idx) => (
                           <div key={idx} className="flex items-center space-x-2">

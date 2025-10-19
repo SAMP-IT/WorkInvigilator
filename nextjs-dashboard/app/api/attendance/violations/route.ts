@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
     })
 
     // Combine and filter based on type
-    let violations = []
+    let violations: any[] = []
     if (violationType === 'late' || !violationType || violationType === 'all') {
       violations = [...violations, ...lateStarts]
     }
