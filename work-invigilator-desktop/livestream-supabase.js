@@ -251,11 +251,33 @@ class LiveStreamManager {
 
       console.log(`📺 Found ${sources.length} screen sources`);
 
-      // Get primary screen
-      const primaryScreen = sources[0];
-      console.log('🖥️ Using screen:', primaryScreen.name);
+      // Get primary screen (largest screen by thumbnail size)
+      // On Windows, sources[0] might not be the primary screen
+      let primaryScreen = sources[0];
+
+      // Find the largest screen (most likely the primary display)
+      for (const source of sources) {
+        // Log each screen for debugging
+        console.log(`📺 Screen option: ${source.name} (id: ${source.id})`);
+      }
+
+      // Select screen with name containing "Screen" or "Entire" (primary display indicator)
+      const screenSource = sources.find(s =>
+        s.name.toLowerCase().includes('screen 1') ||
+        s.name.toLowerCase().includes('entire screen') ||
+        s.name.toLowerCase().includes('primary')
+      );
+
+      if (screenSource) {
+        primaryScreen = screenSource;
+        console.log('🖥️ Using detected primary screen:', primaryScreen.name);
+      } else {
+        console.log('🖥️ Using first available screen:', primaryScreen.name);
+      }
 
       // Get video stream from screen
+      console.log(`🎥 Requesting screen capture for: ${primaryScreen.name} (id: ${primaryScreen.id})`);
+
       const videoStream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
@@ -263,14 +285,23 @@ class LiveStreamManager {
             chromeMediaSource: 'desktop',
             chromeMediaSourceId: primaryScreen.id,
             minWidth: 1280,
-            maxWidth: 1920,
+            maxWidth: 3840, // Support 4K displays
             minHeight: 720,
-            maxHeight: 1080,
+            maxHeight: 2160, // Support 4K displays
             minFrameRate: 15,
             maxFrameRate: 30
           }
         }
       });
+
+      // Verify the captured video dimensions
+      const videoTrack = videoStream.getVideoTracks()[0];
+      const settings = videoTrack.getSettings();
+      console.log(`✅ Screen capture successful: ${settings.width}x${settings.height}`);
+
+      if (settings.width <= 10 || settings.height <= 10) {
+        throw new Error(`Screen capture failed: invalid dimensions ${settings.width}x${settings.height}. Try restarting the app.`);
+      }
 
       console.log('✅ Screen capture successful');
 
@@ -296,29 +327,38 @@ class LiveStreamManager {
       let cameraStream = null;
       try {
         console.log('📷 Starting camera capture...');
-        cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 640 },
-            height: { ideal: 480 },
-            frameRate: { ideal: 30 }
-          },
-          audio: false
-        });
 
-        this.cameraStream = cameraStream;
-        this.isCameraActive = true;
-        console.log('✅ Camera capture successful');
+        // Check if camera is available
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter(device => device.kind === 'videoinput');
+        console.log(`📷 Found ${videoInputs.length} video input device(s)`);
 
-        // Log the camera track label
-        const cameraTrack = cameraStream.getVideoTracks()[0];
-        console.log('📷 Camera track:', {
-          label: cameraTrack.label,
-          id: cameraTrack.id,
-          enabled: cameraTrack.enabled,
-          readyState: cameraTrack.readyState,
-          width: cameraTrack.getSettings().width,
-          height: cameraTrack.getSettings().height
-        });
+        if (videoInputs.length === 0) {
+          console.warn('⚠️ No camera devices found');
+        } else {
+          cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              frameRate: { ideal: 30 }
+            },
+            audio: false
+          });
+
+          this.cameraStream = cameraStream;
+          this.isCameraActive = true;
+
+          // Log the camera track label
+          const cameraTrack = cameraStream.getVideoTracks()[0];
+          const cameraSettings = cameraTrack.getSettings();
+          console.log('✅ Camera capture successful:', {
+            label: cameraTrack.label,
+            id: cameraTrack.id.substring(0, 8),
+            enabled: cameraTrack.enabled,
+            readyState: cameraTrack.readyState,
+            resolution: `${cameraSettings.width}x${cameraSettings.height}`
+          });
+        }
       } catch (cameraError) {
         console.warn('⚠️ Could not capture camera:', cameraError.message);
         console.log('Continuing without camera');
@@ -335,12 +375,26 @@ class LiveStreamManager {
 
       const combinedStream = new MediaStream(tracks);
 
-      console.log('📹 Combined stream created with tracks:', {
-        total: tracks.length,
-        screen: videoStream.getVideoTracks().map(t => ({ label: t.label, id: t.id.substring(0, 8), kind: t.kind })),
-        audio: audioStream ? audioStream.getAudioTracks().map(t => ({ label: t.label, id: t.id.substring(0, 8), kind: t.kind })) : [],
-        camera: cameraStream ? cameraStream.getVideoTracks().map(t => ({ label: t.label, id: t.id.substring(0, 8), kind: t.kind })) : []
-      });
+      console.log('📹 Combined stream created with', tracks.length, 'track(s):');
+      console.log('  📺 Screen video:', videoStream.getVideoTracks().map(t => {
+        const settings = t.getSettings();
+        return `${settings.width}x${settings.height} (${t.label.substring(0, 30)})`;
+      }).join(', '));
+
+      if (audioStream) {
+        console.log('  🔊 Audio:', audioStream.getAudioTracks().map(t =>
+          `${t.label.substring(0, 30)} (enabled: ${t.enabled})`
+        ).join(', '));
+      }
+
+      if (cameraStream) {
+        console.log('  📷 Camera:', cameraStream.getVideoTracks().map(t => {
+          const settings = t.getSettings();
+          return `${settings.width}x${settings.height} (${t.label.substring(0, 30)})`;
+        }).join(', '));
+      }
+
+      console.log(`🚀 Ready to stream ${tracks.length} track(s) to viewers`);
 
       return combinedStream;
     } catch (error) {

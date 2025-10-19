@@ -4,11 +4,13 @@ const { createClient } = require('@supabase/supabase-js');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const activeWin = require('active-win');
+const AppUpdater = require('./updater');
 
 let mainWindow;
 let tray;
 let supabaseClient;
 let activityTrackingInterval = null;
+let appUpdater = null;
 
 // Supabase configuration
 const SUPABASE_CONFIG = {
@@ -123,6 +125,15 @@ function createWindow() {
       label: 'Help',
       submenu: [
         {
+          label: 'Check for Updates',
+          click: () => {
+            if (appUpdater) {
+              appUpdater.checkForUpdates();
+            }
+          }
+        },
+        { type: 'separator' },
+        {
           label: 'About',
           click: () => {
             const { dialog } = require('electron');
@@ -222,6 +233,10 @@ app.whenReady().then(() => {
   createWindow();
   // Disable tray for now - Windows requires specific icon format
   // createTray();
+
+  // Initialize auto-updater
+  appUpdater = new AppUpdater(mainWindow);
+  appUpdater.checkForUpdatesOnStartup();  // Check 5 seconds after startup
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

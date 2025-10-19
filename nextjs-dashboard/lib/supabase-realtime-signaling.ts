@@ -280,6 +280,13 @@ export class SupabaseRealtimeSignaling {
       const presences = state[presenceKey];
       presences.forEach((presence: any) => {
         if (presence.role === 'streamer') {
+          // IMPORTANT: Don't show viewer their own stream
+          // Skip if this streamer's userId matches the viewer's userId
+          if (this.role === 'viewer' && presence.userId === this.userId) {
+            console.log('⏭️ Skipping own desktop stream (viewer filtering):', presence.userId);
+            return;
+          }
+
           streamers.push({
             presenceKey: presenceKey, // Include presence key for routing
             userId: presence.userId,
@@ -302,6 +309,13 @@ export class SupabaseRealtimeSignaling {
   private handlePresenceJoin(presenceKey: string, newPresences: any[]) {
     newPresences.forEach((presence: any) => {
       if (presence.role === 'streamer') {
+        // IMPORTANT: Don't show viewer their own stream
+        // Skip if this streamer's userId matches the viewer's userId
+        if (this.role === 'viewer' && presence.userId === this.userId) {
+          console.log('⏭️ Skipping own desktop stream join (viewer filtering):', presence.userId);
+          return;
+        }
+
         const streamerInfo: StreamerInfo = {
           presenceKey: presenceKey, // Include presence key for routing
           userId: presence.userId,
@@ -341,6 +355,12 @@ export class SupabaseRealtimeSignaling {
       const presences = state[presenceKey];
       presences.forEach((presence: any) => {
         if (presence.role === 'streamer') {
+          // IMPORTANT: Don't show viewer their own stream
+          // Skip if this streamer's userId matches the viewer's userId
+          if (this.role === 'viewer' && presence.userId === this.userId) {
+            return;
+          }
+
           streamers.push({
             presenceKey: presenceKey, // Include presence key for routing
             userId: presence.userId,

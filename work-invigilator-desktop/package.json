@@ -28,6 +28,7 @@
     "active-win": "^8.1.0",
     "dotenv": "^17.2.3",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.3.9",
     "mediasoup-client": "^3.16.7",
     "simple-peer": "^9.11.1",
     "socket.io-client": "^4.8.1"
@@ -35,6 +36,11 @@
   "build": {
     "appId": "com.workinvigilator.desktop",
     "productName": "Work Invigilator",
+    "publish": {
+      "provider": "github",
+      "owner": "your-github-username",
+      "repo": "workinvigilator-releases"
+    },
     "directories": {
       "output": "dist-electron",
       "buildResources": "build"

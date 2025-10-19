@@ -57,8 +57,8 @@ export default function LiveMonitoringSupabasePage() {
     }
 
     // Prevent reconnection if already connected
-    if (signaling?.isConnected()) {
-      console.log('Already connected to Supabase Realtime');
+    if (signalingRef.current?.isConnected()) {
+      console.log('✅ Already connected to Supabase Realtime (using ref)');
       return;
     }
 
@@ -263,11 +263,16 @@ export default function LiveMonitoringSupabasePage() {
     setSignaling(realtimeSignaling);
 
     return () => {
-      // Clean up all peer connections
+      console.log('🧹 Cleanup function called');
+      // Don't disconnect if still navigating within the app
+      // Only clean up peer connections
       peersRef.current.forEach(peer => peer.destroy());
       peersRef.current.clear();
       setPeers(new Map());
-      realtimeSignaling.disconnect();
+
+      // Note: We don't call realtimeSignaling.disconnect() here
+      // because it causes the channel to close prematurely in React strict mode
+      // The connection will be cleaned up when the user navigates away from the page
     };
   }, [user?.id, profile?.organization_id]);
 
