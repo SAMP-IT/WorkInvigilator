@@ -46,16 +46,39 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching attendance:', attendanceError)
     }
 
-    // Get active sessions (sessions without end_time)
-    const { data: activeSessions, error: sessionsError } = await supabaseAdmin
-      .from('recording_sessions')
-      .select('user_id, start_time, duration_seconds')
+    // Get truly active sessions (with recent screenshots in last 5 minutes)
+    // Use screenshots to determine activity, not just session_end_time
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000).toISOString()
+
+    const { data: recentScreenshots, error: screenshotsError } = await supabaseAdmin
+      .from('screenshots')
+      .select('session_id, user_id')
       .eq('organization_id', organizationId)
-      .is('end_time', null)
+      .gte('created_at', fiveMinutesAgo)
+
+    if (screenshotsError) {
+      console.error('Error fetching recent screenshots:', screenshotsError)
+    }
+
+    // Group by user_id to get the latest active session per user
+    const activeSessionsByUser = new Map()
+    recentScreenshots?.forEach(screenshot => {
+      if (screenshot.session_id && screenshot.user_id) {
+        activeSessionsByUser.set(screenshot.user_id, screenshot.session_id)
+      }
+    })
+
+    const { data: allSessions, error: sessionsError } = await supabaseAdmin
+      .from('recording_sessions')
+      .select('id, user_id, session_start_time, total_duration_seconds')
+      .eq('organization_id', organizationId)
+      .in('id', Array.from(activeSessionsByUser.values()))
 
     if (sessionsError) {
       console.error('Error fetching sessions:', sessionsError)
     }
+
+    const activeSessions = allSessions || []
 
     // Calculate real-time statistics for each employee
     const employeeStats = employees?.map(employee => {
@@ -118,7 +141,7 @@ export async function GET(request: NextRequest) {
         clockInTime: attendance?.clock_in_time || null,
         clockOutTime: attendance?.clock_out_time || null,
         productivity: attendance ? 85 : 0, // TODO: Calculate actual productivity
-        lastActive: activeSession?.start_time || attendance?.clock_in_time || null
+        lastActive: activeSession?.session_start_time || attendance?.clock_in_time || null
       }
     }) || []
 

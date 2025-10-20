@@ -455,7 +455,26 @@ class LiveStreamManager {
             // STUN servers for NAT discovery
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
-            // TURN servers for relay (critical for corporate networks)
+
+            // TURN servers - Multiple providers for redundancy
+            // Twilio TURN servers (free tier, high reliability)
+            {
+              urls: 'turn:global.turn.twilio.com:3478?transport=udp',
+              username: 'f4b4035eaa76f4a55de5f4351567653ee4ff6fa97b50b6b334fcc1be4e8d8f71',
+              credential: 'w1uxM55V9yVoqyVFjt+mxDBV0F87AUCemaYVQGxsPLw='
+            },
+            {
+              urls: 'turn:global.turn.twilio.com:3478?transport=tcp',
+              username: 'f4b4035eaa76f4a55de5f4351567653ee4ff6fa97b50b6b334fcc1be4e8d8f71',
+              credential: 'w1uxM55V9yVoqyVFjt+mxDBV0F87AUCemaYVQGxsPLw='
+            },
+            {
+              urls: 'turn:global.turn.twilio.com:443?transport=tcp',
+              username: 'f4b4035eaa76f4a55de5f4351567653ee4ff6fa97b50b6b334fcc1be4e8d8f71',
+              credential: 'w1uxM55V9yVoqyVFjt+mxDBV0F87AUCemaYVQGxsPLw='
+            },
+
+            // OpenRelay as fallback (keep for redundancy)
             {
               urls: 'turn:openrelay.metered.ca:80',
               username: 'openrelayproject',
@@ -511,7 +530,18 @@ class LiveStreamManager {
           this.sendAnswer(viewerPresenceKey, viewerUserId, data);
         } else if (data.candidate) {
           console.log('🧊 Sending ICE candidate to viewer:', viewerPresenceKey, '(userId:', viewerUserId, ')');
-          console.log('🧊 Candidate type:', data.candidate.candidate?.split(' ')[7]); // Log candidate type (host/srflx/relay)
+
+          // Extract and log candidate type for debugging TURN connectivity
+          const candidateStr = data.candidate.candidate || '';
+          const candidateType = candidateStr.includes('typ relay') ? 'RELAY (TURN)' :
+                               candidateStr.includes('typ srflx') ? 'SRFLX (STUN)' :
+                               candidateStr.includes('typ host') ? 'HOST (local)' : 'UNKNOWN';
+          console.log(`🧊 [Desktop] Candidate type: ${candidateType}`);
+
+          if (candidateType === 'RELAY (TURN)') {
+            console.log('%c [Desktop] TURN server working! Relay candidate found.', 'color: green; font-weight: bold');
+          }
+
           this.sendIceCandidate(viewerPresenceKey, viewerUserId, data);
         }
       });
