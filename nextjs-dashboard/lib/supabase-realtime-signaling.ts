@@ -312,10 +312,11 @@ export class SupabaseRealtimeSignaling {
       if (presence.role === 'streamer') {
         // IMPORTANT: Don't show viewer their own stream
         // Skip if this streamer's userId matches the viewer's userId
-        if (this.role === 'viewer' && presence.userId === this.userId) {
-          console.log('⏭️ Skipping own desktop stream join (viewer filtering):', presence.userId);
-          return;
-        }
+        // TEMPORARILY DISABLED FOR TESTING
+        // if (this.role === 'viewer' && presence.userId === this.userId) {
+        //   console.log('⏭️ Skipping own desktop stream join (viewer filtering):', presence.userId);
+        //   return;
+        // }
 
         const streamerInfo: StreamerInfo = {
           presenceKey: presenceKey, // Include presence key for routing

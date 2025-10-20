@@ -455,13 +455,54 @@ class LiveStreamManager {
             // STUN servers for NAT discovery
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' }
+            // TURN servers for relay (critical for corporate networks)
+            {
+              urls: 'turn:openrelay.metered.ca:80',
+              username: 'openrelayproject',
+              credential: 'openrelayproject'
+            },
+            {
+              urls: 'turn:openrelay.metered.ca:443',
+              username: 'openrelayproject',
+              credential: 'openrelayproject'
+            },
+            {
+              urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+              username: 'openrelayproject',
+              credential: 'openrelayproject'
+            }
           ],
           iceCandidatePoolSize: 10
         }
       });
+
+      // Monitor ICE connection state
+      const pc = peer._pc;
+      if (pc) {
+        pc.oniceconnectionstatechange = () => {
+          console.log(`🧊 [Desktop] ICE connection state for ${viewerPresenceKey}:`, pc.iceConnectionState);
+
+          if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+            console.log(`✅ [Desktop] ICE connection established for viewer:`, viewerPresenceKey);
+
+            // Log successful connection details
+            pc.getStats().then(stats => {
+              stats.forEach(report => {
+                if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                  console.log(`📊 [Desktop] Connection using: ${report.localCandidateId} -> ${report.remoteCandidateId}`);
+                }
+                if (report.type === 'local-candidate' && report.candidateType) {
+                  console.log(`📍 [Desktop] Local candidate: ${report.candidateType} (${report.protocol})`);
+                }
+              });
+            });
+          }
+
+          if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+            console.warn(`⚠️ [Desktop] ICE connection ${pc.iceConnectionState} for:`, viewerPresenceKey);
+          }
+        };
+      }
 
       // Handle signals (ICE candidates)
       peer.on('signal', (data) => {
@@ -470,6 +511,7 @@ class LiveStreamManager {
           this.sendAnswer(viewerPresenceKey, viewerUserId, data);
         } else if (data.candidate) {
           console.log('🧊 Sending ICE candidate to viewer:', viewerPresenceKey, '(userId:', viewerUserId, ')');
+          console.log('🧊 Candidate type:', data.candidate.candidate?.split(' ')[7]); // Log candidate type (host/srflx/relay)
           this.sendIceCandidate(viewerPresenceKey, viewerUserId, data);
         }
       });

@@ -330,9 +330,22 @@ export default function LiveMonitoringSupabasePage() {
           // STUN servers for NAT discovery
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' }
+          // TURN servers for relay (critical for corporate networks)
+          {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
         ],
         iceCandidatePoolSize: 10
       }
@@ -364,10 +377,31 @@ export default function LiveMonitoringSupabasePage() {
 
         if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
           console.warn(`⚠️ ICE connection ${pc.iceConnectionState} for:`, presenceKey);
+
+          // Log ICE candidates for debugging
+          pc.getStats().then(stats => {
+            stats.forEach(report => {
+              if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                console.log(`✅ Working candidate pair:`, report);
+              }
+            });
+          });
         }
 
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
           console.log(`✅ ICE connection established for:`, presenceKey);
+
+          // Log successful connection details
+          pc.getStats().then(stats => {
+            stats.forEach(report => {
+              if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                console.log(`📊 Connection using: ${report.localCandidateId} -> ${report.remoteCandidateId}`);
+              }
+              if (report.type === 'local-candidate' && report.candidateType) {
+                console.log(`📍 Local candidate: ${report.candidateType} (${report.protocol})`);
+              }
+            });
+          });
         }
       };
 
@@ -389,14 +423,19 @@ export default function LiveMonitoringSupabasePage() {
     let receivedStream: MediaStream | null = null;
 
     peer.on('stream', (stream: MediaStream) => {
-      console.log('📺 Received stream from:', targetUserId);
-      console.log('📺 Stream tracks:', stream.getTracks().map(t => ({
-        kind: t.kind,
-        label: t.label,
-        id: t.id.substring(0, 8),
-        enabled: t.enabled,
-        readyState: t.readyState
-      })));
+      console.log('🎥 Stream received from:', presenceKey);
+      console.log('📊 Stream details:', {
+        id: stream.id,
+        active: stream.active,
+        tracks: stream.getTracks().map(t => ({
+          kind: t.kind,
+          label: t.label,
+          id: t.id.substring(0, 8),
+          enabled: t.enabled,
+          readyState: t.readyState,
+          muted: t.muted
+        }))
+      });
       receivedStream = stream;
 
       const videoTracks = stream.getVideoTracks();
@@ -423,6 +462,12 @@ export default function LiveMonitoringSupabasePage() {
         console.log('💾 Stored screen stream for:', targetUserId);
 
         if (video) {
+          // Prevent reassigning if already playing the same stream
+          if (video.srcObject === screenStream) {
+            console.log('📺 Video already playing this stream, skipping reassignment');
+            return;
+          }
+
           console.log('📺 Setting screen stream with', screenStream.getTracks().length, 'tracks');
           video.srcObject = screenStream;
 
