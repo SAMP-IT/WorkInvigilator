@@ -36,6 +36,8 @@
   "build": {
     "appId": "com.workinvigilator.desktop",
     "productName": "Work Invigilator",
+    "npmRebuild": false,
+    "buildDependenciesFromSource": false,
     "publish": {
       "provider": "github",
       "owner": "your-github-username",

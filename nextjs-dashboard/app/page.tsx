@@ -383,52 +383,6 @@ function HomePageContent() {
             </CardContent>
           </Card>
 
-          {/* Top Variances */}
-          <Card hover>
-            <CardHeader>
-              <CardTitle>Top Variances</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {(() => {
-                  const employeesWithProductivity = employees.filter((employee) => employee.productivity7d > 0);
-
-                  if (employeesWithProductivity.length > 0) {
-                    return employeesWithProductivity
-                      .sort((a, b) => b.productivity7d - a.productivity7d)
-                      .slice(0, 4)
-                      .map((employee, i) => {
-                        const change = employee.productivity7d - 75; // Mock baseline of 75%
-                        const direction = change >= 0 ? "up" : "down";
-                        return (
-                          <div
-                            key={employee.id}
-                            className="flex items-center justify-between p-2"
-                          >
-                            <span className="text-sm text-ink-hi">{employee.name || employee.email.split("@")[0]}</span>
-                            <div
-                              className={`text-sm font-medium ${
-                                direction === "up" ? "text-success" : "text-danger"
-                              }`}
-                            >
-                              {direction === "up" ? "↗" : "↘"} {change >= 0 ? "+" : ""}{change.toFixed(1)}%
-                            </div>
-                          </div>
-                        );
-                      });
-                  } else {
-                    return (
-                      <div className="text-center py-8 text-ink-muted">
-                        <p className="text-sm">No productivity data available</p>
-                        <p className="text-xs mt-1">Employees need to complete work sessions to show variances</p>
-                      </div>
-                    );
-                  }
-                })()}
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Recent Screenshots */}
           <Card hover>
             <CardHeader>

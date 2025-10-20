@@ -556,16 +556,28 @@ class WorkInvigilatorApp {
 
   async initializeLiveStreamInBackground() {
     // Run live streaming initialization in background without blocking UI
+    console.log('🚀 ========================================');
     console.log('🚀 Starting live streaming initialization in background...');
+    console.log('🚀 ========================================');
     try {
       console.log('🔧 Step 1: Initialize live stream manager...');
       await this.initializeLiveStream();
-      console.log('🔧 Step 2: Start live streaming...');
+      console.log('✅ Step 1 complete: Live stream manager initialized');
+
+      console.log('🔧 Step 2: Start live streaming (capture media)...');
       await this.startLiveStreaming();
-      console.log('✅ Live streaming initialized in background successfully');
+      console.log('✅ Step 2 complete: Live streaming started');
+
+      console.log('🚀 ========================================');
+      console.log('✅ Live streaming fully initialized and ready');
+      console.log('✅ Desktop app is broadcasting presence to viewers');
+      console.log('🚀 ========================================');
     } catch (error) {
+      console.error('❌ ========================================');
       console.error('❌ Failed to initialize live streaming (non-critical):', error);
-      console.error('Error stack:', error.stack);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      console.error('❌ ========================================');
       // Don't fail the entire session if live streaming fails
     }
   }

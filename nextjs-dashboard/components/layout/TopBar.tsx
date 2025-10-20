@@ -1,12 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { Badge } from '@/components/ui/Badge';
-import { Input } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
 
 interface User {
   id: string;
@@ -16,14 +14,10 @@ interface User {
 }
 
 export function TopBar() {
-  const [dateRange, setDateRange] = useState('Last 7 days');
   const [user, setUser] = useState<User | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [activeSessions, setActiveSessions] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  const pathname = usePathname();
   const { profile, signOut } = useAuth();
 
   // Close menu when clicking outside
@@ -38,30 +32,6 @@ export function TopBar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Load active sessions count
-  useEffect(() => {
-    const loadActiveSessions = async () => {
-      if (!profile?.organization_id) return;
-
-      try {
-        const { count } = await supabase
-          .from('recording_sessions')
-          .select('*', { count: 'exact', head: true })
-          .eq('organization_id', profile.organization_id)
-          .is('session_end_time', null);
-
-        setActiveSessions(count || 0);
-      } catch (error) {
-        // Error loading active sessions
-      }
-    };
-
-    loadActiveSessions();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(loadActiveSessions, 30000);
-    return () => clearInterval(interval);
-  }, [profile]);
 
   useEffect(() => {
     // Get current user
@@ -125,44 +95,11 @@ export function TopBar() {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && searchQuery.trim()) {
-      // Redirect to employees page with search query
-      router.push(`/employees?search=${encodeURIComponent(searchQuery)}`);
-    }
-  };
-
-  const handleDateRangeChange = (newRange: string) => {
-    setDateRange(newRange);
-
-    // If on dashboard, reload with new period
-    if (pathname === '/') {
-      let period = 'today';
-      if (newRange === 'Last 7 days') period = 'week';
-      else if (newRange === 'Last 14 days' || newRange === 'Last 30 days') period = 'month';
-
-      // Trigger page reload with new period (you can make this more elegant with state management)
-      window.location.href = `/?period=${period}`;
-    }
-  };
-
   return (
     <div className="flex h-16 items-center justify-between px-6 bg-surface border-b border-line">
       {/* Left section */}
       <div className="flex items-center space-x-4">
-        {/* Global search */}
-        <div className="relative">
-          <Input
-            placeholder="Search employees, sessions..."
-            className="w-80"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={handleSearch}
-          />
-          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-            <span className="text-ink-muted text-xs">Enter</span>
-          </div>
-        </div>
+        {/* Search removed */}
       </div>
 
       {/* Right section */}

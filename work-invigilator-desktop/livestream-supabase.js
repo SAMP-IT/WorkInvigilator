@@ -35,6 +35,8 @@ class LiveStreamManager {
     const channelName = `live-monitoring:${organizationId}`;
     console.log('📡 Channel name:', channelName);
     console.log('📡 Organization ID:', organizationId);
+    console.log('📡 User ID:', user.id);
+    console.log('📡 User email:', user.email);
 
     // Use compound key with session ID to make each app instance unique
     // Format: userId:role:sessionId (must match dashboard format)
@@ -65,16 +67,19 @@ class LiveStreamManager {
         console.log('✅ Connected to Supabase Realtime');
 
         // Track presence as streamer
-        await this.channel.track({
+        const presenceData = {
           userId: this.currentUser.id,
           userName: this.currentUser.email,
           userEmail: this.currentUser.email,
           role: 'streamer',
           streamActive: true,
           connectedAt: new Date().toISOString()
-        });
+        };
 
-        console.log('✅ Registered as streamer');
+        await this.channel.track(presenceData);
+
+        console.log('✅ Registered as streamer with presence data:', presenceData);
+        console.log('✅ My presence key for receiving offers:', this.presenceKey);
       }
     });
 
@@ -120,15 +125,20 @@ class LiveStreamManager {
 
   handleSignalingMessage(message) {
     // Log ALL messages to debug routing
+    console.log('📨 ========================================');
     console.log('📨 RAW MESSAGE HANDLER CALLED');
     console.log('📨 Message type:', message.type);
-    console.log('📨 Message from:', message.from);
-    console.log('📨 Message to:', message.to);
+    console.log('📨 Message from (viewer presence key):', message.from);
+    console.log('📨 Message to (target presence key):', message.to);
     console.log('📨 My presence key:', this.presenceKey);
+    console.log('📨 Presence keys match:', message.to === this.presenceKey);
+    console.log('📨 ========================================');
 
     // Ignore messages not meant for us (check presence key, not userId)
     if (message.to && message.to !== this.presenceKey) {
-      console.log('⏭️ Skipping message - not for us');
+      console.log('⏭️ Skipping message - not for us (presence key mismatch)');
+      console.log('⏭️ Expected:', this.presenceKey);
+      console.log('⏭️ Received:', message.to);
       return;
     }
 
@@ -198,11 +208,13 @@ class LiveStreamManager {
 
   async startStreaming() {
     if (this.isStreaming) {
-      console.log('Already streaming');
+      console.log('⚠️ Already streaming');
       return { success: true };
     }
 
     try {
+      console.log('🎥 Starting media capture...');
+
       // Capture screen + audio from Electron renderer
       const stream = await this.captureScreenAndAudio();
 
@@ -217,10 +229,14 @@ class LiveStreamManager {
         video: stream.getVideoTracks().length,
         audio: stream.getAudioTracks().length
       });
+      console.log('✅ Desktop app is NOW READY to receive viewer connections');
+      console.log('✅ Viewers can connect to presence key:', this.presenceKey);
 
       return { success: true };
     } catch (error) {
-      console.error('Failed to start streaming:', error);
+      console.error('❌ Failed to start streaming:', error);
+      console.error('Error details:', error.message);
+      console.error('Stack:', error.stack);
       return { success: false, error: error.message };
     }
   }

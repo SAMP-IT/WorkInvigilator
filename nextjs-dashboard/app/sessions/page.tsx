@@ -77,8 +77,7 @@ export default function SessionsPage() {
   };
 
   const filteredSessions = sessions.filter(session => {
-    const matchesSearch = session.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         session.apps.some(app => app.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = session.employeeName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || session.status === statusFilter;
 
     let matchesSession = true;
@@ -152,7 +151,7 @@ export default function SessionsPage() {
 
   const handleExportCSV = () => {
     // Create CSV content
-    const headers = ['Employee Name', 'Employee ID', 'Start Time', 'End Time', 'Duration', 'Focus Time', 'Focus %', 'Status', 'Applications', 'Screenshots'];
+    const headers = ['Employee Name', 'Employee ID', 'Start Time', 'End Time', 'Duration', 'Focus Time', 'Focus %', 'Status', 'Screenshots'];
     const csvRows = [
       headers.join(','),
       ...filteredSessions.map(session => [
@@ -164,7 +163,6 @@ export default function SessionsPage() {
         `"${session.focusTime}"`,
         session.focusPercent,
         session.status,
-        `"${session.apps.join('; ')}"`,
         session.screenshots
       ].join(','))
     ];
@@ -208,7 +206,7 @@ export default function SessionsPage() {
               <div className="flex items-center space-x-4">
                 <div className="flex-1">
                   <Input
-                    placeholder="Search by employee name or application..."
+                    placeholder="Search by employee name..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full"
@@ -292,7 +290,6 @@ export default function SessionsPage() {
                 <TableHead>Duration</TableHead>
                 <TableHead>Focus Time</TableHead>
                 <TableHead>Focus %</TableHead>
-                <TableHead>Applications</TableHead>
                 <TableHead>Screenshots</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
@@ -319,7 +316,6 @@ export default function SessionsPage() {
                     <TableCell><div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
                     <TableCell><div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
                     <TableCell><div className="h-4 bg-gray-300 rounded w-12 animate-pulse"></div></TableCell>
-                    <TableCell><div className="h-6 bg-gray-300 rounded w-20 animate-pulse"></div></TableCell>
                     <TableCell><div className="h-4 bg-gray-300 rounded w-8 animate-pulse"></div></TableCell>
                     <TableCell><div className="h-6 bg-gray-300 rounded w-16 animate-pulse"></div></TableCell>
                     <TableCell><div className="h-8 bg-gray-300 rounded w-20 animate-pulse"></div></TableCell>
@@ -327,7 +323,7 @@ export default function SessionsPage() {
                 ))
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={8} className="text-center py-8">
                     <div className="text-danger text-sm">{error}</div>
                     <Button variant="outline" size="sm" onClick={loadData} className="mt-2">
                       Try Again
@@ -336,7 +332,7 @@ export default function SessionsPage() {
                 </TableRow>
               ) : filteredSessions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={8} className="text-center py-8">
                     <div className="text-ink-muted">
                       {searchTerm || statusFilter !== 'all' ? 'No sessions found matching your criteria.' : 'No sessions found.'}
                     </div>
@@ -386,20 +382,6 @@ export default function SessionsPage() {
                             : 'bg-danger'
                         }`}
                       />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {session.apps.slice(0, 3).map((app, i) => (
-                        <Badge key={i} variant="outline" size="sm">
-                          {app}
-                        </Badge>
-                      ))}
-                      {session.apps.length > 3 && (
-                        <Badge variant="outline" size="sm">
-                          +{session.apps.length - 3}
-                        </Badge>
-                      )}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -457,7 +439,6 @@ export default function SessionsPage() {
                         className="mx-auto mb-3"
                       />
                       <h3 className="text-lg font-semibold text-ink-hi">{employee.employeeName}</h3>
-                      <p className="text-ink-muted">Employee ID: {employee.employeeId}</p>
                     </div>
 
                     {/* Today&apos;s Sessions */}

@@ -29,7 +29,8 @@
       "Bash(findstr:*)",
       "Bash(dir:*)",
       "Bash(del productivitypage.tsx)",
-      "Bash(ping:*)"
+      "Bash(ping:*)",
+      "Bash(mkdir -p .claude/docs)"
     ]
   },
   "enableAllProjectMcpServers": true,
