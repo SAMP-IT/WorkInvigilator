@@ -60,6 +60,9 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching recent screenshots:', screenshotsError)
     }
 
+    console.log('Recent screenshots count:', recentScreenshots?.length || 0)
+    console.log('Five minutes ago:', fiveMinutesAgo)
+
     // Group by user_id to get the latest active session per user
     const activeSessionsByUser = new Map()
     recentScreenshots?.forEach(screenshot => {
@@ -68,17 +71,34 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    const { data: allSessions, error: sessionsError } = await supabaseAdmin
-      .from('recording_sessions')
-      .select('id, user_id, session_start_time, total_duration_seconds')
-      .eq('organization_id', organizationId)
-      .in('id', Array.from(activeSessionsByUser.values()))
+    const sessionIds = Array.from(activeSessionsByUser.values())
+    let activeSessions: Array<{
+      id: string
+      user_id: string
+      session_start_time: string
+      total_duration_seconds: number
+    }> = []
 
-    if (sessionsError) {
-      console.error('Error fetching sessions:', sessionsError)
+    console.log('Active session IDs found:', sessionIds)
+    console.log('Active sessions by user map size:', activeSessionsByUser.size)
+
+    // Only query if we have session IDs
+    if (sessionIds.length > 0) {
+      const { data: allSessions, error: sessionsError } = await supabaseAdmin
+        .from('recording_sessions')
+        .select('id, user_id, session_start_time, total_duration_seconds')
+        .eq('organization_id', organizationId)
+        .in('id', sessionIds)
+
+      if (sessionsError) {
+        console.error('Error fetching sessions:', sessionsError)
+      } else {
+        activeSessions = allSessions || []
+        console.log('Active sessions found:', activeSessions.length)
+      }
+    } else {
+      console.log('No active session IDs to query')
     }
-
-    const activeSessions = allSessions || []
 
     // Calculate real-time statistics for each employee
     const employeeStats = employees?.map(employee => {
@@ -150,6 +170,8 @@ export async function GET(request: NextRequest) {
     const idleCount = employeeStats.filter(e => e.status === 'idle').length
     const offlineCount = employeeStats.filter(e => e.status === 'offline').length
     const lateCount = employeeStats.filter(e => e.isLate).length
+
+    console.log('Final stats - Active:', activeCount, 'Idle:', idleCount, 'Offline:', offlineCount)
 
     const totalHoursToday = employeeStats.reduce((sum, e) => sum + e.todayHoursRaw, 0)
     const avgProductivity = employeeStats.length > 0
