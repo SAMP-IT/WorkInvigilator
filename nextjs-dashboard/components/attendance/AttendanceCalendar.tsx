@@ -13,9 +13,10 @@ interface AttendanceCalendarProps {
   records: AttendanceRecord[];
   selectedMonth: Date;
   onDateClick?: (date: string) => void;
+  selectedDate?: string | null;
 }
 
-export function AttendanceCalendar({ records, selectedMonth, onDateClick }: AttendanceCalendarProps) {
+export function AttendanceCalendar({ records, selectedMonth, onDateClick, selectedDate }: AttendanceCalendarProps) {
   const calendarData = useMemo(() => {
     const year = selectedMonth.getFullYear();
     const month = selectedMonth.getMonth();
@@ -127,6 +128,7 @@ export function AttendanceCalendar({ records, selectedMonth, onDateClick }: Atte
 
           const { day, date, record } = item;
           const isToday = new Date().toISOString().split('T')[0] === date;
+          const isSelected = selectedDate === date;
 
           return (
             <div
@@ -136,7 +138,8 @@ export function AttendanceCalendar({ records, selectedMonth, onDateClick }: Atte
                 aspect-square border-2 rounded-lg p-2 cursor-pointer
                 hover:shadow-md transition-all
                 ${getStatusColor(record)}
-                ${isToday ? 'ring-2 ring-primary' : ''}
+                ${isToday ? 'ring-2 ring-blue-400' : ''}
+                ${isSelected ? 'ring-4 ring-primary shadow-lg scale-105' : ''}
               `}
             >
               <div className="h-full flex flex-col items-center justify-center">

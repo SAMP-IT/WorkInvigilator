@@ -42,6 +42,7 @@ export default function AttendancePage() {
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [employees, setEmployees] = useState<any[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && profile?.organization_id) {
@@ -274,13 +275,46 @@ export default function AttendancePage() {
           <AttendanceCalendar
             records={records}
             selectedMonth={selectedMonth}
-            onDateClick={(date) => console.log('Date clicked:', date)}
+            onDateClick={(date) => setSelectedDate(date)}
+            selectedDate={selectedDate}
           />
         </div>
 
+        {/* Selected Date Filter Info */}
+        {selectedDate && (
+          <div className="bg-primary/10 border border-primary rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-primary">
+                    Showing records for: {new Date(selectedDate).toLocaleDateString('en-US', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </p>
+                  <p className="text-xs text-ink-mid mt-1">
+                    {records.filter(r => r.date === selectedDate).length} record(s) found
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedDate(null)}
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+              >
+                Show All Records
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Attendance Table */}
         <AttendanceTable
-          records={records}
+          records={selectedDate ? records.filter(r => r.date === selectedDate) : records}
           loading={loading}
           onRefresh={loadAttendanceData}
         />
