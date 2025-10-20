@@ -32,6 +32,7 @@ export default function LiveMonitoringSupabasePage() {
   const [isConnected, setIsConnected] = useState(false);
   const videoRefsMap = useRef<Map<string, HTMLVideoElement>>(new Map());
   const cameraRefsMap = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const screenStreamsMap = useRef<Map<string, MediaStream>>(new Map());
   const cameraStreamsMap = useRef<Map<string, MediaStream>>(new Map());
   const peersRef = useRef<Map<string, SimplePeer.Instance>>(new Map());
   const [peers, setPeers] = useState<Map<string, SimplePeer.Instance>>(new Map());
@@ -177,6 +178,10 @@ export default function LiveMonitoringSupabasePage() {
         videoRefsMap.current.delete(data.userId);
         console.log('🧹 Cleaned up video ref for:', data.userId);
       }
+
+      // Clean up screen stream
+      screenStreamsMap.current.delete(data.userId);
+      console.log('🧹 Cleaned up screen stream for:', data.userId);
 
       // Clean up camera elements and streams
       const cameraVideo = cameraRefsMap.current.get(data.userId);
@@ -403,15 +408,21 @@ export default function LiveMonitoringSupabasePage() {
       if (videoTracks.length > 0) {
         screenTrack = videoTracks[0];
         const video = videoRefsMap.current.get(targetUserId);
+
+        // Create and persist the screen stream
+        const screenStream = new MediaStream([screenTrack]);
+
+        // Add audio tracks to screen video
+        audioTracks.forEach(track => {
+          screenStream.addTrack(track);
+          console.log('🔊 Added audio track to screen stream:', track.id.substring(0, 8), 'enabled:', track.enabled);
+        });
+
+        // Store screen stream for retry attempts
+        screenStreamsMap.current.set(targetUserId, screenStream);
+        console.log('💾 Stored screen stream for:', targetUserId);
+
         if (video) {
-          const screenStream = new MediaStream([screenTrack]);
-
-          // Add audio tracks to screen video
-          audioTracks.forEach(track => {
-            screenStream.addTrack(track);
-            console.log('🔊 Added audio track to screen stream:', track.id.substring(0, 8), 'enabled:', track.enabled);
-          });
-
           console.log('📺 Setting screen stream with', screenStream.getTracks().length, 'tracks');
           video.srcObject = screenStream;
 
@@ -457,6 +468,34 @@ export default function LiveMonitoringSupabasePage() {
           }
         } else {
           console.log('⏳ Screen video element not ready yet for:', targetUserId);
+
+          // Retry after a short delay when element is ready
+          setTimeout(() => {
+            const video = videoRefsMap.current.get(targetUserId);
+            const existingStream = screenStreamsMap.current.get(targetUserId);
+
+            if (video && existingStream) {
+              console.log('📺 Retrying screen stream for:', targetUserId);
+              video.srcObject = existingStream;
+              video.muted = true;
+              video.volume = 1.0;
+
+              video.play()
+                .then(() => {
+                  console.log('✅ Screen video playing (after retry) for:', targetUserId);
+                  setMutedStreams(prev => {
+                    const newSet = new Set(prev);
+                    newSet.add(targetUserId);
+                    return newSet;
+                  });
+                })
+                .catch(err => console.error('Error playing video on retry:', err));
+            } else {
+              console.error('❌ Screen video element STILL not ready after retry for:', targetUserId);
+              console.error('   - Video element exists:', !!video);
+              console.error('   - Stream exists:', !!existingStream);
+            }
+          }, 500); // Wait 500ms for DOM to render
         }
       }
 

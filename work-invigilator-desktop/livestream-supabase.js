@@ -12,6 +12,7 @@ class LiveStreamManager {
     this.presenceKey = null; // Store our presence key (like socket.id)
     this.peers = new Map(); // Map of viewerPresenceKey -> SimplePeer instance
     this.pendingIceCandidates = new Map(); // Buffer ICE candidates that arrive before peer is created
+    this.pendingOffers = new Map(); // Buffer offers that arrive before localStream is ready
     this.localStream = null;
     this.cameraStream = null;
     this.isStreaming = false;
@@ -232,6 +233,17 @@ class LiveStreamManager {
       console.log('✅ Desktop app is NOW READY to receive viewer connections');
       console.log('✅ Viewers can connect to presence key:', this.presenceKey);
 
+      // Process any pending offers that arrived before stream was ready
+      if (this.pendingOffers.size > 0) {
+        console.log(`📬 Processing ${this.pendingOffers.size} pending offer(s)...`);
+        for (const [viewerPresenceKey, { viewerUserId, offer }] of this.pendingOffers.entries()) {
+          console.log('📬 Processing buffered offer from:', viewerPresenceKey);
+          await this.handleOffer(viewerPresenceKey, viewerUserId, offer);
+        }
+        this.pendingOffers.clear();
+        console.log('✅ All pending offers processed');
+      }
+
       return { success: true };
     } catch (error) {
       console.error('❌ Failed to start streaming:', error);
@@ -422,7 +434,8 @@ class LiveStreamManager {
   async handleOffer(viewerPresenceKey, viewerUserId, offer) {
     try {
       if (!this.localStream) {
-        console.error('❌ No local stream available');
+        console.log('⏳ Local stream not ready yet, buffering offer from:', viewerPresenceKey);
+        this.pendingOffers.set(viewerPresenceKey, { viewerUserId, offer });
         return;
       }
 
