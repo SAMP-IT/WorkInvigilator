@@ -102,10 +102,9 @@ class AppUpdater {
 
   // Check for updates on app start (with delay)
   checkForUpdatesOnStartup() {
-    // Wait 5 seconds after app starts to check for updates
-    setTimeout(() => {
-      autoUpdater.checkForUpdates();
-    }, 5000);
+    // Disabled auto-update check on startup
+    // Users can manually check via Help > Check for Updates menu
+    console.log('Auto-update check on startup is disabled');
   }
 }
 

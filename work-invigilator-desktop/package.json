@@ -38,11 +38,7 @@
     "productName": "Work Invigilator",
     "npmRebuild": false,
     "buildDependenciesFromSource": false,
-    "publish": {
-      "provider": "github",
-      "owner": "your-github-username",
-      "repo": "workinvigilator-releases"
-    },
+    "publish": null,
     "directories": {
       "output": "dist-electron",
       "buildResources": "build"
