@@ -30,7 +30,18 @@
       "Bash(dir:*)",
       "Bash(del productivitypage.tsx)",
       "Bash(ping:*)",
-      "Bash(mkdir -p .claude/docs)"
+      "Bash(mkdir -p .claude/docs)",
+      "Bash(npm create:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(npm exec tailwindcss:*)",
+      "Bash(ren ProductivityBreakdownPage.tsx ProductivityBreakdown.tsx)",
+      "Bash(move ProductivityBreakdownPage.tsx ProductivityBreakdown.tsx)",
+      "Bash(cat:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npx tsc:*)",
+      "Bash(timeout 10 bash:*)",
+      "Bash(awk:*)",
+      "Bash(curl:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
