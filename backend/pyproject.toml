@@ -1,0 +1,67 @@
+[tool.poetry]
+name = "workinvigilator-backend"
+version = "1.0.0"
+description = "Work Invigilator FastAPI Backend"
+authors = ["Work Invigilator Team"]
+readme = "README.md"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.115.0"
+uvicorn = {extras = ["standard"], version = "^0.32.0"}
+psycopg2-binary = "^2.9.9"
+asyncpg = "^0.29.0"
+sqlalchemy = "^2.0.35"
+alembic = "^1.13.0"
+pydantic = "^2.10.0"
+pydantic-settings = "^2.6.0"
+email-validator = "^2.2.0"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-multipart = "^0.0.17"
+redis = "^5.2.0"
+hiredis = "^3.0.0"
+b2sdk = "^2.5.0"
+celery = "^5.4.0"
+httpx = "^0.28.0"
+python-dateutil = "^2.9.0"
+pytz = "^2024.2"
+python-dotenv = "^1.0.1"
+python-json-logger = "^3.2.0"
+sentry-sdk = {extras = ["fastapi"], version = "^2.18.0"}
+prometheus-fastapi-instrumentator = "^7.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.0"
+pytest-asyncio = "^0.24.0"
+pytest-cov = "^6.0.0"
+faker = "^30.8.2"
+black = "^24.10.0"
+ruff = "^0.8.0"
+mypy = "^1.13.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 120
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
