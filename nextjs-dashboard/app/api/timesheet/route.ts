@@ -58,6 +58,95 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // First, try to get attendance records for this date range
+    const { data: attendanceRecords } = await supabaseAdmin
+      .from('attendance_records')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .gte('date', dateStart.toISOString().split('T')[0])
+      .lte('date', dateEnd.toISOString().split('T')[0])
+
+    // If we have attendance records, use them directly
+    if (attendanceRecords && attendanceRecords.length > 0) {
+      const entries = attendanceRecords.map(record => {
+        const employee = employees.find(emp => emp.id === record.user_id)
+
+        // Get employee name
+        let employeeName = 'Unknown'
+        if (employee) {
+          if (employee.name && employee.name.trim() !== '' && !employee.name.includes('-')) {
+            employeeName = employee.name
+          } else if (employee.email) {
+            employeeName = employee.email.split('@')[0]
+          }
+        }
+
+        const workHours = record.total_work_seconds / 3600
+        const breakHours = record.total_break_seconds / 3600
+
+        // Format time helper
+        const formatTime = (timestamp: string | null) => {
+          if (!timestamp) return '-'
+          return new Date(timestamp).toLocaleTimeString('en-GB', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZone: 'America/New_York'
+          })
+        }
+
+        return {
+          employeeId: record.user_id,
+          employeeName,
+          employeeDepartment: employee?.department || 'N/A',
+          date: new Date(record.date).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+          }),
+          punchIn: formatTime(record.clock_in_time),
+          punchOut: formatTime(record.clock_out_time),
+          workHours,
+          breakHours,
+          netHours: Math.max(0, workHours - breakHours),
+          status: record.status === 'present' ? 'completed' : record.status,
+          sessionCount: 1,
+          sessionDetails: [{
+            id: record.id,
+            punchIn: formatTime(record.clock_in_time),
+            punchOut: formatTime(record.clock_out_time),
+            duration: record.total_work_seconds,
+            startTime: record.clock_in_time,
+            endTime: record.clock_out_time
+          }]
+        }
+      })
+
+      // Sort by date and name
+      entries.sort((a, b) => {
+        const dateCompare = b.date.localeCompare(a.date)
+        if (dateCompare !== 0) return dateCompare
+        return a.employeeName.localeCompare(b.employeeName)
+      })
+
+      const summary = {
+        totalEmployees: entries.length,
+        totalWorkHours: entries.reduce((sum, e) => sum + e.workHours, 0),
+        totalBreakHours: entries.reduce((sum, e) => sum + e.breakHours, 0),
+        totalNetHours: entries.reduce((sum, e) => sum + e.netHours, 0)
+      }
+
+      return NextResponse.json({
+        entries,
+        summary,
+        dateRange: {
+          start: dateStart.toISOString(),
+          end: dateEnd.toISOString(),
+          range
+        }
+      })
+    }
+
     // Get all recording sessions in the date range
     // Filter out sessions with unrealistic durations (> 24 hours = 86400 seconds)
     const { data: allSessions } = await supabaseAdmin

@@ -449,10 +449,10 @@ export default function ScreenshotsPage() {
 
         {/* Screenshot Modal */}
         {selectedScreenshot && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-            <div className="relative max-w-4xl max-h-full p-4">
-              <div className="bg-surface rounded-lg overflow-hidden">
-                <div className="flex items-center justify-between p-4 border-b border-line">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+            <div className="relative w-full max-w-7xl max-h-[95vh] flex flex-col">
+              <div className="bg-surface rounded-lg overflow-hidden flex flex-col h-full">
+                <div className="flex items-center justify-between p-4 border-b border-line flex-shrink-0">
                   <h3 className="text-lg font-semibold text-ink-hi">Screenshot Preview</h3>
                   <Button
                     variant="ghost"
@@ -462,8 +462,8 @@ export default function ScreenshotsPage() {
                     Close
                   </Button>
                 </div>
-                <div className="p-4">
-                  <div className="aspect-video bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg flex items-center justify-center mb-4 overflow-hidden">
+                <div className="p-4 flex-1 overflow-auto">
+                  <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg flex items-center justify-center mb-4 overflow-hidden min-h-[70vh]">
                     {(() => {
                       const screenshot = displayedScreenshots.find(s => s.id === selectedScreenshot);
                       return screenshot?.url ? (
